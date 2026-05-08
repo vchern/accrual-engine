@@ -146,18 +146,22 @@ module Lambda
       def sample_anchor_available?
         File.exist?(SAMPLE_ANCHOR_PATH)
       end
+
+      def import_counts
+        {
+          customers:        Customer.count,
+          skus:             Sku.count,
+          gl_accounts:      GlAccount.count,
+          vendors:          Vendor.count,
+          usage_events:     UsageEvent.count,
+          purchase_orders:  PurchaseOrder.count,
+          goods_receipts:   GoodsReceipt.count
+        }
+      end
     end
 
     get '/import' do
-      @counts = {
-        customers:        Customer.count,
-        skus:             Sku.count,
-        gl_accounts:      GlAccount.count,
-        vendors:          Vendor.count,
-        usage_events:     UsageEvent.count,
-        purchase_orders:  PurchaseOrder.count,
-        goods_receipts:   GoodsReceipt.count
-      }
+      @counts = import_counts
       erb :'import/show'
     end
 
@@ -169,6 +173,17 @@ module Lambda
       halt 400, 'must be a .xlsx file' unless original.downcase.end_with?('.xlsx')
 
       FileUtils.cp(file[:tempfile].path, UPLOAD_PATH)
+
+      # Validate BEFORE wiping any data — a malformed file leaves the existing
+      # state intact and the user gets a clear list of what needs fixing.
+      begin
+        Seeder.validate!(path: UPLOAD_PATH)
+      rescue Seeder::SchemaError => e
+        @counts = import_counts
+        @schema_errors = e.errors
+        status 422
+        return erb :'import/show'
+      end
 
       DB.transaction do
         ALL_TABLES.each { |t| DB[t].delete }

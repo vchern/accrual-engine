@@ -20,8 +20,38 @@ class Seeder
     'CUS-1003' => { sku: 'INFERENCE-1K-TOKENS', mean: 5000, sigma: 500, round: 0 }
   }.freeze
 
+  # Expected sheet names + column order. Any divergence in an uploaded XLSX
+  # raises SchemaError before we touch the database — protects against the
+  # silent-shift bug where columns swapped in the spreadsheet would land
+  # in the wrong DB fields.
+  SHEET_SCHEMA = {
+    'customers'          => %w[customer_id name currency country status billing_anchor],
+    'sku_price_book'     => %w[sku unit list_unit_price_usd category],
+    'vendors'            => %w[vendor_id name category currency default_gl_account default_department],
+    'gl_accounts'        => %w[account_code name type],
+    'usage_events'       => %w[event_id customer_id sku quantity occurred_on],
+    'chargebee_invoices' => %w[invoice_id customer_id period_start period_end issued_at subtotal_usd currency fx_to_usd],
+    'purchase_orders'    => %w[po_number vendor_id po_type department gl_account currency po_total_usd po_status],
+    'po_lines'           => %w[po_number po_line_ref description qty uom unit_price_usd line_total_usd],
+    'goods_receipts'     => %w[receipt_id po_number po_line_ref received_qty received_on value_usd notes],
+    'vendor_invoices'    => %w[invoice_number vendor_id po_number invoice_date subtotal_usd status]
+  }.freeze
+
+  class SchemaError < StandardError
+    attr_reader :errors
+
+    def initialize(errors)
+      @errors = Array(errors)
+      super(@errors.join("\n"))
+    end
+  end
+
   def self.run!(path: ANCHOR_PATH, log: ->(m) { puts m })
     new(path: path, log: log).call
+  end
+
+  def self.validate!(path:)
+    new(path: path, log: ->(_) {}).validate!
   end
 
   def initialize(path:, log:)
@@ -29,9 +59,31 @@ class Seeder
     @log  = log
   end
 
+  def validate!
+    raise SchemaError, ["File not found: #{@path}"] unless File.exist?(@path)
+    @xlsx ||= Roo::Excelx.new(@path)
+
+    errors = []
+    SHEET_SCHEMA.each do |sheet_name, expected_cols|
+      sheet = sheet_or_nil(sheet_name)
+      if sheet.nil?
+        errors << "Missing sheet: '#{sheet_name}'"
+        next
+      end
+      actual = Array(sheet.row(1)).map { |c| c.to_s.strip }
+      expected_cols.each_with_index do |col, i|
+        got = actual[i]
+        next if got == col
+        display = got.nil? || got.empty? ? '(empty)' : got
+        errors << "Sheet '#{sheet_name}', column #{i + 1}: expected '#{col}', got '#{display}'"
+      end
+    end
+    raise SchemaError, errors unless errors.empty?
+    true
+  end
+
   def call
-    raise "Anchor XLSX not found at #{@path}" unless File.exist?(@path)
-    @xlsx = Roo::Excelx.new(@path)
+    validate!
 
     DB.transaction do
       seed_customers
@@ -252,6 +304,12 @@ class Seeder
       next if row.all? { |c| c.nil? || c.to_s.strip.empty? }
       yield row
     end
+  end
+
+  def sheet_or_nil(name)
+    @xlsx.sheet(name)
+  rescue StandardError
+    nil
   end
 
   def customer_pk(code)

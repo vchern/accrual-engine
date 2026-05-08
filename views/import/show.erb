@@ -8,6 +8,18 @@
     </p>
   </div>
 
+  <% if @schema_errors && @schema_errors.any? %>
+    <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+      <div class="font-medium">Schema validation failed.</div>
+      <p class="mt-1 text-red-800">The uploaded file doesn't match the expected layout. Existing data is unchanged.</p>
+      <ul class="mt-2 space-y-0.5 list-disc list-inside font-mono text-xs">
+        <% @schema_errors.each do |msg| %>
+          <li><%= msg %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
   <% if reference_loaded? %>
     <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
       <div class="font-medium">Reference data loaded.</div>
