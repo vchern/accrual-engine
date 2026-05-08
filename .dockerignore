@@ -1,0 +1,36 @@
+# Source control
+.git
+.gitignore
+.gitattributes
+
+# Local secrets — set via `fly secrets set` instead
+.env
+.env.local
+.env.*.local
+
+# Local databases (the production volume is mounted at /data)
+db/development.sqlite3
+db/test.sqlite3
+db/*.sqlite3-journal
+db/*.sqlite3-wal
+db/*.sqlite3-shm
+
+# Tests don't ship to production
+spec
+.rspec_status
+coverage
+
+# Editor / tooling
+.idea
+.vscode
+.claude
+.ruby-lsp
+*.swp
+.DS_Store
+
+# JS deps (none right now)
+node_modules
+
+# Runtime detritus
+tmp
+log

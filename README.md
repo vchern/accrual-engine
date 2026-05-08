@@ -94,6 +94,34 @@ detector edge cases, business calendar (weekend + holiday skip), CSV
 export shape + balance, narrator transport injection, and the full
 HTTP close-run flow.
 
+## Deploy (Fly.io)
+
+The repo ships a `Dockerfile`, `.dockerignore`, `fly.toml`, and `bin/start`
+suitable for a free-tier Fly deploy with a 1 GB persistent volume for SQLite.
+
+```bash
+# Install flyctl (PowerShell)
+iwr https://fly.io/install.ps1 -useb | iex
+
+# Auth + claim the app name (the one in fly.toml is generic — change if taken)
+fly auth login
+fly launch --copy-config --no-deploy --region iad
+
+# Persistent volume for the SQLite file (DATABASE_PATH=/data/production.sqlite3)
+fly volumes create lambda_data --size 1 --region iad
+
+# Secrets (NEVER bake into the image; rotate at AI Studio if exposed)
+fly secrets set GEMINI_API_KEY=<your-key>
+
+fly deploy
+```
+
+The `bin/start` entrypoint migrates on every boot (idempotent) and seeds
+on the first boot only (`Customer.count.zero?` check). The container does
+NOT pull a fresh XLSX from anywhere — the file ships in the image build,
+so anyone deploying their own copy needs `Helix_Anchor_Dataset_CANDIDATE.xlsx`
+in the project root before running `fly deploy`.
+
 ## Known limitations
 
 See [ARCHITECTURE.md § Known limitations](ARCHITECTURE.md#known-limitations).

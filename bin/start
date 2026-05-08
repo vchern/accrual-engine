@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+DB_PATH="${DATABASE_PATH:-/data/production.sqlite3}"
+mkdir -p "$(dirname "$DB_PATH")"
+
+echo "[start] migrating ${APP_ENV:-production} db at ${DB_PATH}..."
+bundle exec rake db:migrate
+
+echo "[start] checking seed state..."
+bundle exec ruby -e "
+  require_relative 'config/boot'
+  require_relative 'lib/models'
+  if Customer.count.zero?
+    require_relative 'lib/seeder'
+    Seeder.run!
+  else
+    puts '[start] DB already seeded; skipping.'
+  end
+"
+
+echo "[start] launching rackup on port ${PORT:-9292}..."
+exec bundle exec rackup -p "${PORT:-9292}" -o 0.0.0.0 -E "${APP_ENV:-production}"

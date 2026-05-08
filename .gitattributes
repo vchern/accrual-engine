@@ -1,0 +1,8 @@
+* text=auto
+
+# Shell scripts and config files that run on Linux must stay LF, even on Windows checkouts.
+bin/*           text eol=lf
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+fly.toml        text eol=lf
