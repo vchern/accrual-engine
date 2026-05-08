@@ -15,9 +15,9 @@ Both reduce to the same shape: *given the data we have, what's the closest-to-ac
 | --- | --- |
 | **Sinatra over Rails** | The pluggable-handler story is a Ruby concern, not a framework one. A reviewer can read `app.rb` end-to-end in a few minutes — fewer surprises, no hidden magic. The brief ruled out auth/RBAC/jobs (Rails' headline wins) so the cost was minimal. |
 | **Sequel over ActiveRecord** | Sinatra-idiomatic, fast, BigDecimal-clean. Migration DSL is concise. |
-| **SQLite** | Single file, zero ops, production-viable on a Fly volume at this scale. Postgres swap is a 30-min Sequel adapter change. |
+| **SQLite** | Single file, zero ops. Render's free tier has ephemeral disk, so production data is uploaded fresh per session via `/import` (this is also a feature — the demo always starts clean). Postgres swap is a 30-min Sequel adapter change for true persistence. |
 | **BigDecimal everywhere** | Float is banned for money. Decimal columns + Sequel coercion give exact arithmetic. |
-| **Tailwind via CDN** | Demo grade. Compilation step would land in phase 7 deploy. |
+| **Tailwind via CDN** | Demo grade. Compilation step (e.g. via `tailwindcss-ruby`) would land before any real production rollout. |
 | **RSpec** | Standard. Each example wraps in a Sequel transaction with rollback for clean isolation. |
 | **Google Gemini 2.5 Flash** | Free-tier LLM, current generation, grounded narration. Swappable to Anthropic/OpenAI without engine changes. |
 
@@ -168,7 +168,7 @@ Each spec wraps in a Sequel transaction with rollback for isolation.
 | Stretch handlers — AP subscription / straight-line and AP milestone (pattern is in place) | 2 hr each |
 | Forecast model with prediction interval on a dashboard page | half day |
 | Real per-currency price book (anchor only had USD); FX path in handlers is ready | 1 hr |
-| Postgres swap (Sequel adapter change + Fly Postgres provisioning) | 30 min |
+| Postgres swap (Sequel adapter change + Render-managed Postgres or Neon free tier) | 30 min |
 | Auth + RBAC (out of scope per brief) | 1 day with Devise/Sorcery or roll-your-own |
 
 ## Known limitations
