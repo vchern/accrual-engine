@@ -1,5 +1,8 @@
 require 'sinatra/base'
 require 'sinatra/contrib'
+require_relative 'lib/models'
+require_relative 'lib/accruals'
+require_relative 'lib/seeder'
 
 module Lambda
   class App < Sinatra::Base

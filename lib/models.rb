@@ -1,0 +1,20 @@
+# Loads all Sequel models. Require AFTER the DB schema exists (i.e. after
+# migrations have run), since Sequel introspects column accessors at class
+# definition time.
+require_relative 'models/customer'
+require_relative 'models/sku'
+require_relative 'models/vendor'
+require_relative 'models/gl_account'
+require_relative 'models/fx_rate'
+require_relative 'models/usage_event'
+require_relative 'models/chargebee_invoice'
+require_relative 'models/purchase_order'
+require_relative 'models/po_line'
+require_relative 'models/goods_receipt'
+require_relative 'models/vendor_invoice'
+require_relative 'models/close_run'
+require_relative 'models/accrual'
+require_relative 'models/accrual_source'
+require_relative 'models/journal_entry'
+require_relative 'models/journal_line'
+require_relative 'models/audit_event'

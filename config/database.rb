@@ -8,3 +8,7 @@ DB_PATHS = {
 
 DB = Sequel.sqlite(DB_PATHS.fetch(APP_ENV))
 DB.extension :pagination
+
+# Models load even before migrations have run (Rakefile path).
+Sequel::Model.require_valid_table = false
+Sequel::Model.plugin :timestamps, update_on_create: true

@@ -1,6 +1,11 @@
 ENV['APP_ENV'] = 'test'
 
 require_relative '../config/boot'
+
+# Migrate before any model loads — Sequel introspects schema at class definition.
+Sequel.extension :migration
+Sequel::Migrator.run(DB, File.join(ROOT, 'db', 'migrations'))
+
 require_relative '../app'
 require 'rspec'
 require 'rack/test'
