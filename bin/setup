@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+bundle install
+bundle exec rake db:setup
+echo
+echo "Setup complete. Run the app with:"
+echo "  bundle exec rackup"
+echo "Run the test suite with:"
+echo "  bundle exec rspec"
