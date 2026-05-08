@@ -153,7 +153,7 @@ module Accruals
 
     # Best-effort: ask the LLM narrator for a Controller-grade summary of
     # each newly-flagged accrual. Run *outside* the engine transaction so
-    # an LLM error never rolls back the close. Skip if no API key.
+    # an LLM error never rolls back the close.
     def narrate_flagged_accruals
       flagged = Accrual.where(
         close_run_id:     @close_run.id,
@@ -161,6 +161,13 @@ module Accruals
         review_narration: nil
       ).all
       return if flagged.empty?
+
+      if ENV['GEMINI_API_KEY'].to_s.strip.empty?
+        audit(:review_narration_skipped,
+              reason: 'GEMINI_API_KEY not set in environment',
+              flagged_accrual_count: flagged.size)
+        return
+      end
 
       narrator = Accruals::ReviewNarrator.new
       flagged.each do |accrual|
