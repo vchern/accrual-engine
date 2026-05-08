@@ -11,7 +11,7 @@ module Accruals
   # English paraphrasing, not arithmetic. If GEMINI_API_KEY is unset, the
   # call returns nil silently and the UI hides the section.
   class ReviewNarrator
-    DEFAULT_MODEL    = 'gemini-2.5-flash'.freeze
+    DEFAULT_MODEL    = 'gemini-2.5-flash-lite'.freeze
     ENDPOINT         = 'https://generativelanguage.googleapis.com/v1beta/models'.freeze
     # Gemini 2.5 routes a chunk of `maxOutputTokens` to internal "thinking"
     # tokens by default — we don't need that for 2-3 sentence paraphrasing,

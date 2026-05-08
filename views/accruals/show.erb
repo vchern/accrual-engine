@@ -30,13 +30,29 @@
         <div class="font-medium">Flagged for review</div>
         <div class="mt-1"><%= @accrual.flagged_reason %></div>
       </div>
-      <% if @accrual.review_narration && !@accrual.review_narration.empty? %>
+      <% ns = narration_status(@accrual) %>
+      <% case ns[:state] %>
+      <% when :added %>
         <div class="border-t border-amber-200 pt-2">
           <div class="text-xs uppercase tracking-wide font-medium text-amber-700">
             AI review note
-            <span class="text-amber-600 normal-case font-normal">&middot; <%= @accrual.review_narration_model %></span>
+            <span class="text-amber-600 normal-case font-normal">&middot; <%= ns[:model] %></span>
           </div>
-          <p class="mt-1 italic text-amber-900"><%= @accrual.review_narration %></p>
+          <p class="mt-1 italic text-amber-900"><%= ns[:message] %></p>
+        </div>
+      <% when :failed %>
+        <div class="border-t border-amber-200 pt-2">
+          <div class="text-xs uppercase tracking-wide font-medium text-amber-700">
+            AI review note &middot; failed
+          </div>
+          <p class="mt-1 text-amber-900">The Gemini call errored: <span class="font-mono text-xs"><%= ns[:message] %></span></p>
+        </div>
+      <% when :skipped %>
+        <div class="border-t border-amber-200 pt-2">
+          <div class="text-xs uppercase tracking-wide font-medium text-amber-700">
+            AI review note &middot; skipped
+          </div>
+          <p class="mt-1 text-amber-900"><%= ns[:message] %></p>
         </div>
       <% end %>
     </div>

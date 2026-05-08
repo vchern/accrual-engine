@@ -158,6 +158,27 @@ module Lambda
           goods_receipts:   GoodsReceipt.count
         }
       end
+
+      # Returns { state: :added | :failed | :skipped | :none, message:, model: }
+      # describing why a flagged accrual does or doesn't have an LLM narration.
+      # Reads the audit log written by Engine#narrate_flagged_accruals.
+      def narration_status(accrual)
+        if accrual.review_narration && !accrual.review_narration.to_s.empty?
+          return { state: :added,
+                   message: accrual.review_narration,
+                   model:   accrual.review_narration_model }
+        end
+
+        failed = AuditEvent.where(accrual_id: accrual.id, action: 'review_narration_failed')
+                            .order(Sequel.desc(:created_at)).first
+        return { state: :failed, message: failed.payload_data['error'].to_s } if failed
+
+        skipped = AuditEvent.where(close_run_id: accrual.close_run_id, action: 'review_narration_skipped')
+                            .order(Sequel.desc(:created_at)).first
+        return { state: :skipped, message: skipped.payload_data['reason'].to_s } if skipped
+
+        { state: :none, message: nil }
+      end
     end
 
     get '/import' do

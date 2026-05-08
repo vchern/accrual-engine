@@ -67,11 +67,23 @@
               <span class="num"><%= usd(a.amount_usd) %></span>
               <span class="text-amber-800"> &mdash; <%= a.flagged_reason %></span>
             </div>
-            <% if a.review_narration && !a.review_narration.empty? %>
+            <% ns = narration_status(a) %>
+            <% case ns[:state] %>
+            <% when :added %>
               <div class="mt-1 text-amber-900 italic">
                 <span class="text-xs uppercase tracking-wide not-italic font-medium text-amber-700">AI review note</span>
-                <span class="text-xs text-amber-600 not-italic">&middot; <%= a.review_narration_model %></span>
-                <div class="mt-0.5"><%= a.review_narration %></div>
+                <span class="text-xs text-amber-600 not-italic">&middot; <%= ns[:model] %></span>
+                <div class="mt-0.5"><%= ns[:message] %></div>
+              </div>
+            <% when :failed %>
+              <div class="mt-1 text-xs text-amber-700">
+                <span class="uppercase tracking-wide font-medium">AI review note &middot; failed</span>
+                <span class="text-amber-600">&middot; <%= ns[:message] %></span>
+              </div>
+            <% when :skipped %>
+              <div class="mt-1 text-xs text-amber-700">
+                <span class="uppercase tracking-wide font-medium">AI review note &middot; skipped</span>
+                <span class="text-amber-600">&middot; <%= ns[:message] %></span>
               </div>
             <% end %>
           </div>

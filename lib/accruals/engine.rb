@@ -10,6 +10,11 @@ module Accruals
   class Engine
     HANDLERS = []
 
+    # If a narration call failed within this window, skip retrying for the
+    # same accrual on the next engine.run!. Prevents repeated 'Run engine'
+    # clicks from hammering an already-rate-limited Gemini endpoint.
+    NARRATION_RETRY_COOLDOWN_SECONDS = 600   # 10 minutes
+
     def self.register(handler_class)
       HANDLERS << handler_class unless HANDLERS.include?(handler_class)
       handler_class
@@ -153,7 +158,8 @@ module Accruals
 
     # Best-effort: ask the LLM narrator for a Controller-grade summary of
     # each newly-flagged accrual. Run *outside* the engine transaction so
-    # an LLM error never rolls back the close.
+    # an LLM error never rolls back the close. Skips accruals that failed
+    # within NARRATION_RETRY_COOLDOWN_SECONDS to protect the API quota.
     def narrate_flagged_accruals
       flagged = Accrual.where(
         close_run_id:     @close_run.id,
@@ -169,8 +175,23 @@ module Accruals
         return
       end
 
+      cooldown_floor = Time.now.utc - NARRATION_RETRY_COOLDOWN_SECONDS
+      recently_failed_ids = AuditEvent
+        .where(action: 'review_narration_failed', accrual_id: flagged.map(&:id))
+        .where(Sequel[:created_at] > cooldown_floor)
+        .select_map(:accrual_id)
+
+      to_narrate = flagged.reject { |a| recently_failed_ids.include?(a.id) }
+      if to_narrate.empty?
+        audit(:review_narration_cooldown,
+              flagged_accrual_count:    flagged.size,
+              cooldown_seconds:         NARRATION_RETRY_COOLDOWN_SECONDS,
+              skipped_accrual_ids:      recently_failed_ids)
+        return
+      end
+
       narrator = Accruals::ReviewNarrator.new
-      flagged.each do |accrual|
+      to_narrate.each do |accrual|
         result = narrator.narrate(accrual)
         next if result.nil?
 
@@ -190,6 +211,7 @@ module Accruals
     def audit(action, payload = {})
       ev = AuditEvent.new(
         close_run_id: @close_run.id,
+        accrual_id:   payload[:accrual_id],
         action:       action.to_s,
         actor:        'engine',
         created_at:   Time.now.utc
