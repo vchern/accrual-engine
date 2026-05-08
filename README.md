@@ -33,7 +33,7 @@ cd accrual-engine
 bin/setup                 # bundle install + db:migrate (no auto-seed in prod-like flow)
 cp .env.example .env      # optional — populate GEMINI_API_KEY for AI notes
 bundle exec rackup        # http://localhost:9292
-bundle exec rspec         # 62 specs, ~14 sec
+bundle exec rspec         # 73 specs, ~14 sec
 ```
 
 You also need `Helix_Anchor_Dataset_CANDIDATE.xlsx` _somewhere_ on your
@@ -57,7 +57,7 @@ that works locally works in production.
 - **BigDecimal everywhere** — `Float` is banned for money.
 - **Tailwind (compiled)** — `tailwindcss-ruby` standalone binary; one ~15 KB minified `public/application.css` precompiled in Render's build step. No Node, no runtime CDN.
 - **RSpec + Rack::Test** — service, engine, integration, and HTTP-level system specs.
-- **Google Gemini 2.5 Flash** — grounded review narration for flagged accruals.
+- **Google Gemini 2.5 Flash-Lite** — grounded review narration for flagged accruals.
 
 ## Project layout
 
@@ -77,28 +77,37 @@ Helix_Anchor_Dataset_CANDIDATE.xlsx   (gitignored — drop in to seed)
 ## AI review notes (Gemini)
 
 When the engine flags an accrual, it sends the _structured_ anomaly signal
-(date, qty, median, z-score, customer label) to Gemini 2.5 Flash and asks
-for a 2-3 sentence Controller-grade note. The prompt forbids inventing
-amounts; the LLM only paraphrases the engine's facts. Result is cached on
-the `accruals` row, so the UI never blocks on a live API call.
+(date, qty, median, z-score, customer label) to **Gemini 2.5 Flash-Lite**
+and asks for a 2-3 sentence Controller-grade note. The prompt forbids
+inventing amounts; the LLM only paraphrases the engine's facts. Result is
+cached on the `accruals` row, so the UI never blocks on a live API call.
 
 Get a free key at https://aistudio.google.com/apikey, paste into `.env` as
-`GEMINI_API_KEY=...`. Without a key, the narration section is silently
-hidden in the UI — everything else still works.
+`GEMINI_API_KEY=...`. The flagged-accrual UI reads the audit log and shows
+the narration **outcome** — `added` (with text), `failed` (with Gemini's
+error message), or `skipped` (with reason, typically "GEMINI_API_KEY not
+set"). A reviewer can tell at a glance whether the LLM ran, errored, or
+was disabled.
+
+**Rate-limit handling**: a failed call audits `review_narration_failed`;
+subsequent runs skip retry within a 10-minute cooldown to protect the
+free-tier quota. Config-level skips (no key) don't block — adding the key
+and re-running narrates immediately.
 
 ## Testing
 
 ```bash
-bundle exec rspec                        # all 62
+bundle exec rspec                        # all 73
 bundle exec rspec spec/integration       # asserts AR=$362.50, AP=$100,000
 bundle exec rspec spec/system            # HTTP-level UI flow
 ```
 
 Coverage spans handlers (against the brief's target cents), engine
-plumbing (idempotency, reversals, audit, source replacement), anomaly
-detector edge cases, business calendar (weekend + holiday skip), CSV
-export shape + balance, narrator transport injection, and the full
-HTTP close-run flow.
+plumbing (idempotency, reversals, audit, source replacement, narration
+cooldown), anomaly detector edge cases, business calendar (weekend +
+holiday skip), CSV export shape + balance, narrator transport injection,
+seeder schema validation (missing sheet / renamed column / swapped
+columns), and the full HTTP close-run flow.
 
 ## Deploy (Render free tier)
 
@@ -115,10 +124,11 @@ needed.
 ```
 
 **Free-tier trade-off**: ephemeral disk + 15-min idle spin-down. Cold
-boots wipe SQLite, so the reviewer re-uploads the anchor XLSX on the
-first visit of each demo session. `bin/start` migrates on every boot
-but does NOT auto-seed — uploads are the only way data lands. For a
-demo this is actually a feature: each session starts clean.
+boots wipe SQLite, so the reviewer either re-uploads an XLSX or clicks
+**Load sample data** (which seeds from the bundled anchor) on the first
+visit of each demo session. `bin/start` migrates on every boot but does
+NOT auto-seed — imports are the only way data lands. For a demo this is
+actually a feature: each session starts clean.
 
 For persistent state, switch the Render service to the `starter` plan
 ($7/mo) and add a managed disk, or swap SQLite for a managed Postgres

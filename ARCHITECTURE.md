@@ -17,7 +17,7 @@ Both reduce to the same shape: _given the data we have, what's the closest-to-ac
 | **SQLite**                  | Single file, zero ops. Render's free tier has ephemeral disk, so production data is uploaded fresh per session via `/import` (this is also a feature — the demo always starts clean). Postgres swap is a 30-min Sequel adapter change for true persistence. |
 | **BigDecimal**              | Float is banned for money to avoid binary representation issues. Decimal columns + Sequel coercion give exact arithmetic.                                                                                                                                   |
 | **RSpec**                   | Standard. Each example wraps in a Sequel transaction with rollback for clean isolation.                                                                                                                                                                     |
-| **Google Gemini 2.5 Flash** | Free-tier LLM, current generation, grounded narration. Swappable to Anthropic/OpenAI without engine changes.                                                                                                                                                |
+| **Google Gemini 2.5 Flash-Lite** | Free-tier LLM, current generation, grounded narration. Lite variant chosen for higher RPM/RPD on the free tier — quality drop for 2-3 sentence paraphrasing is negligible. Swappable to Anthropic/OpenAI without engine changes.                                                                                                                                                |
 
 ## 3. Data model
 
@@ -51,6 +51,8 @@ The deployed app starts with an empty schema and lands on `/import` until refere
 - **Click "Load sample data"** — uses the bundled Helix anchor that ships with the repo, so a reviewer with no XLSX in hand can demo in one click.
 
 Each import wipes all tables in dependency order before re-seeding, so the engine never accrues against a stale partial state. Render's free tier has ephemeral disk, which makes this a feature: every cold-boot session starts clean and the panelist can decide which dataset to demo against. Controller-grade framing ("Data import" rather than "anchor data") keeps the affordance unambiguous to a non-engineer.
+
+**Schema validation before any destructive op.** The seeder destructured rows positionally, which would silently shift data if a column were renamed or reordered — exactly the kind of bug that ruins an accrual without anyone noticing. `Seeder.validate!(path:)` checks every sheet name and every column header against `SHEET_SCHEMA` before any row is read or any table is touched. On failure it raises `Seeder::SchemaError` with a list of human-readable problems ("Missing sheet: X", "Sheet Y, column 3: expected currency, got CURRENCY"). The upload route returns 422 and re-renders `/import` with a red banner listing every issue; the existing data is untouched.
 
 ## 4. Engine flow
 
@@ -129,7 +131,7 @@ Median + MAD (Median Absolute Deviation), scaled by 1.4826 for normal-ish data, 
 
 For the anchor's seeded outlier (CUS-1001 Mar 30, 25h vs ~10h median): z ≈ 6.1, well above threshold. The accrual still books at actual quantity per spec — the flag is for human review, not auto-correction.
 
-## 11. AI: LLM-narrated review notes (Gemini 2.5 Flash)
+## 11. AI: LLM-narrated review notes (Gemini 2.5 Flash-Lite)
 
 For each flagged accrual, the engine sends the **structured signal** to Gemini and persists a 2-3 sentence Controller-grade narrative.
 
@@ -149,21 +151,27 @@ For each flagged accrual, the engine sends the **structured signal** to Gemini a
 - `thinkingConfig.thinkingBudget = 0` disables Gemini 2.5's internal reasoning tokens (we don't need CoT for paraphrasing)
 - Runs **outside** the engine transaction — an LLM error never rolls back the close
 - Result cached on `accruals.review_narration` so the UI never blocks on a live API call
-- Errors audited as `review_narration_failed`; a missing key audits `review_narration_skipped` (with reason) and the UI hides the narration block
 - Swappable to Anthropic / OpenAI by replacing one class — engine is unaware
 
-## 12. Test strategy (62 specs)
+**Reliability around the API call**:
 
-| Layer             | What it covers                                                                                                                                   |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Service           | Each handler against the brief's target cents (`AR=$362.50`, `AP=$100,000`); EUR fx math; mid-period churn; partial receipt; fully-invoiced skip |
-| Engine            | Idempotent re-run, source replacement, reversal pairing, audit events, amount-change detection                                                   |
-| Anomaly detector  | Outlier flag, baseline-too-small, zero-MAD edge case                                                                                             |
-| Business calendar | Weekend skip, federal-holiday skip, the close→reversal date specifically                                                                         |
-| CSV exporter      | Header + per-line + balanced DR/CR                                                                                                               |
-| Narrator          | Nil paths, transport injection, error capture                                                                                                    |
-| Integration       | Full close against the seeded anchor → exact target match; calendar-month bound on a non-anchor period_end                                       |
-| System (HTTP)     | Close flow (index → run → drill-through → CSV); engine-state reset endpoint; data-import upload + bundled-sample button                          |
+- **Audited outcomes**: every narration attempt writes one of `review_narration_added` (success, with model name), `review_narration_failed` (with the Gemini error string), or `review_narration_skipped` (with reason — typically "GEMINI_API_KEY not set in environment")
+- **UI surfacing via `narration_status` helper**: instead of silently hiding the section, the flagged-accrual UI reads the audit log and shows *why* a narration is missing — "AI review note · skipped — GEMINI_API_KEY not set" or "AI review note · failed — Gemini 429: quota exceeded". A reviewer can tell at a glance whether to add a key, retry later, or escalate.
+- **Retry cooldown**: `Engine::NARRATION_RETRY_COOLDOWN_SECONDS` (10 min) gates re-attempts after a failure. Without it, repeated "Run engine" clicks would slam an already-rate-limited endpoint and pile up identical 429s. Cooldown is failure-scoped only — a config-level "skipped" event doesn't block immediate retry once the key is added.
+
+## 12. Test strategy (73 specs)
+
+| Layer             | What it covers                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Service           | Each handler against the brief's target cents (`AR=$362.50`, `AP=$100,000`); EUR fx math; mid-period churn; partial receipt; fully-invoiced skip                    |
+| Engine            | Idempotent re-run, source replacement, reversal pairing, audit events, amount-change detection, narration cooldown                                                  |
+| Anomaly detector  | Outlier flag, baseline-too-small, zero-MAD edge case                                                                                                                |
+| Business calendar | Weekend skip, federal-holiday skip, the close→reversal date specifically                                                                                            |
+| CSV exporter      | Header + per-line + balanced DR/CR                                                                                                                                  |
+| Narrator          | Nil paths, transport injection, error capture                                                                                                                       |
+| Seeder validation | Happy path; missing file, missing sheet, renamed column, swapped columns                                                                                            |
+| Integration       | Full close against the seeded anchor → exact target match; calendar-month bound on a non-anchor period_end                                                          |
+| System (HTTP)     | Close flow (index → run → drill-through → CSV); engine-state reset endpoint; data-import upload + bundled-sample button; schema-validation 422; narration UI states |
 
 Each spec wraps in a Sequel transaction with rollback for isolation.
 
