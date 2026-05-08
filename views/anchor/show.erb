@@ -1,0 +1,55 @@
+<div class="space-y-8">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Anchor data</h1>
+    <p class="text-slate-600 mt-1 text-sm">
+      Upload the Helix anchor XLSX to seed reference data (customers, SKUs, GL accounts,
+      vendors) and the Mar 22-31 transaction window. The engine runs against whatever
+      you upload — uploading replaces all existing data.
+    </p>
+  </div>
+
+  <% if reference_loaded? %>
+    <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+      <div class="font-medium">Reference data loaded.</div>
+      <div class="mt-1 text-emerald-800">
+        <%= @counts[:customers] %> customers ·
+        <%= @counts[:skus] %> SKUs ·
+        <%= @counts[:gl_accounts] %> GL accounts ·
+        <%= @counts[:vendors] %> vendors ·
+        <%= @counts[:usage_events] %> usage events ·
+        <%= @counts[:purchase_orders] %> POs ·
+        <%= @counts[:goods_receipts] %> goods receipts.
+      </div>
+      <a href="/closes" class="inline-block mt-2 font-medium underline">Go to closes &rarr;</a>
+    </div>
+  <% else %>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <div class="font-medium">No reference data loaded.</div>
+      <div class="mt-1">Upload an anchor XLSX to begin.</div>
+    </div>
+  <% end %>
+
+  <div class="rounded-lg border border-slate-200 bg-white p-6">
+    <form method="post" action="/anchor" enctype="multipart/form-data" class="space-y-4"
+          onsubmit="return confirm('Upload anchor file? All existing data (reference + engine state) will be replaced with the contents of this file.');">
+      <div>
+        <label for="anchor_file" class="block text-sm font-medium text-slate-700 mb-1">
+          Helix anchor XLSX
+        </label>
+        <input type="file" name="anchor_file" id="anchor_file" accept=".xlsx" required
+               class="block w-full text-sm text-slate-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
+        <p class="mt-2 text-xs text-slate-500">
+          Expected sheets: customers, sku_price_book, vendors, gl_accounts,
+          usage_events, chargebee_invoices, purchase_orders, po_lines,
+          goods_receipts, vendor_invoices.
+        </p>
+      </div>
+      <div>
+        <button type="submit"
+                class="inline-flex items-center rounded-md bg-slate-900 text-white text-sm font-medium px-4 py-2 hover:bg-slate-800 shadow-sm">
+          Upload &amp; seed
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

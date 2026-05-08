@@ -1,0 +1,24 @@
+# Render.com deploy blueprint. From the repo root, sign in at
+# https://dashboard.render.com/blueprints and "New Blueprint Instance"
+# pointed at this repo.
+#
+# Free plan caveat: ephemeral disk. SQLite resets on every cold boot
+# (15-min idle window). Reference data is uploaded via /anchor in the
+# UI on first visit; reseed by re-uploading the XLSX. For persistent
+# state, switch the plan to `starter` and add a managed disk.
+
+services:
+  - type: web
+    name: accrual-engine
+    runtime: ruby
+    plan: free
+    region: oregon
+    buildCommand: bundle install
+    startCommand: bin/start
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: BUNDLE_WITHOUT
+        value: development:test
+      - key: GEMINI_API_KEY
+        sync: false   # Set this manually in the Render dashboard.

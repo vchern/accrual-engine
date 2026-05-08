@@ -2,6 +2,8 @@ require 'sinatra/base'
 require 'sinatra/contrib'
 require 'bigdecimal'
 require 'date'
+require 'fileutils'
+require 'tmpdir'
 require_relative 'lib/models'
 require_relative 'lib/accruals'
 require_relative 'lib/seeder'
@@ -112,6 +114,7 @@ module Lambda
     end
 
     get '/closes' do
+      redirect '/anchor' unless reference_loaded?
       @closes = CloseRun.order(Sequel.desc(:created_at)).all
       @totals_by_close = @closes.each_with_object({}) do |c, h|
         accruals = Accrual.where(close_run_id: c.id).all
@@ -122,6 +125,52 @@ module Lambda
         }
       end
       erb :'closes/index'
+    end
+
+    # All tables in dependency-safe order for full wipe.
+    ALL_TABLES = %i[
+      journal_lines journal_entries accrual_sources audit_events accruals close_runs
+      vendor_invoices goods_receipts po_lines purchase_orders
+      chargebee_invoices usage_events
+      fx_rates gl_accounts vendors skus customers
+    ].freeze
+
+    UPLOAD_PATH = File.join(Dir.tmpdir, 'lambda_uploaded_anchor.xlsx').freeze
+
+    helpers do
+      def reference_loaded?
+        Customer.count.positive? && Sku.count.positive?
+      end
+    end
+
+    get '/anchor' do
+      @counts = {
+        customers:        Customer.count,
+        skus:             Sku.count,
+        gl_accounts:      GlAccount.count,
+        vendors:          Vendor.count,
+        usage_events:     UsageEvent.count,
+        purchase_orders:  PurchaseOrder.count,
+        goods_receipts:   GoodsReceipt.count
+      }
+      erb :'anchor/show'
+    end
+
+    post '/anchor' do
+      file = params[:anchor_file]
+      halt 400, 'anchor_file is required (multipart upload).' unless file && file[:tempfile]
+
+      original = file[:filename].to_s
+      halt 400, 'must be a .xlsx file' unless original.downcase.end_with?('.xlsx')
+
+      FileUtils.cp(file[:tempfile].path, UPLOAD_PATH)
+
+      DB.transaction do
+        ALL_TABLES.each { |t| DB[t].delete }
+      end
+      Seeder.run!(path: UPLOAD_PATH, log: ->(_) {})
+
+      redirect '/closes'
     end
 
     post '/closes/reset' do

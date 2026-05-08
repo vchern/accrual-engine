@@ -24,25 +24,30 @@ Engine against `Helix_Anchor_Dataset_CANDIDATE.xlsx` for **period_end = 2026-03-
 - CUS-1003 churned EOD Mar 29 → 1-day accrual, not 3.
 - For `period_end=2026-04-30` the engine correctly produces AR=$0 (no April events) + AP=$100,000 (still uninvoiced) — calendar-month bound works.
 
-## Quick start
+## Quick start (local)
 
 ```bash
 git clone https://github.com/vchern/accrual-engine
 cd accrual-engine
 
-# Drop Helix_Anchor_Dataset_CANDIDATE.xlsx into the project root.
-# It's gitignored by design (binary anchor data, not source).
-
-bin/setup                 # bundle install + db:setup (drops, migrates, seeds)
+bin/setup                 # bundle install + db:migrate (no auto-seed in prod-like flow)
 cp .env.example .env      # optional — populate GEMINI_API_KEY for AI notes
 bundle exec rackup        # http://localhost:9292
-bundle exec rspec         # 53 specs, ~4 sec
+bundle exec rspec         # 60 specs, ~14 sec
 ```
 
-UI flow: home → `/closes` → **Run engine** with `period_end=2026-03-31` →
-overview shows totals + flagged banner → tabs for accruals / journal entries
-/ audit log → drill-through to source UsageEvents and GoodsReceipts → CSV
-export.
+You also need `Helix_Anchor_Dataset_CANDIDATE.xlsx` *somewhere* on your
+disk. The app uploads it via the UI rather than reading from disk —
+gitignored binary data stays out of source control, and the same flow
+that works locally works in production.
+
+**UI flow**:
+1. Home → `/anchor` (auto-redirected on a clean DB)
+2. Upload the XLSX → seeder runs → redirected to `/closes`
+3. **Run engine** with `period_end=2026-03-31`
+4. Overview shows totals + flagged banner → tabs for accruals / journal
+   entries / audit log → drill-through to source UsageEvents and
+   GoodsReceipts → CSV export.
 
 ## Stack
 
@@ -94,33 +99,29 @@ detector edge cases, business calendar (weekend + holiday skip), CSV
 export shape + balance, narrator transport injection, and the full
 HTTP close-run flow.
 
-## Deploy (Fly.io)
+## Deploy (Render free tier)
 
-The repo ships a `Dockerfile`, `.dockerignore`, `fly.toml`, and `bin/start`
-suitable for a free-tier Fly deploy with a 1 GB persistent volume for SQLite.
+The repo ships a `render.yaml` blueprint and a `bin/start` entrypoint.
+Render's free tier requires no card and runs Ruby natively — no Docker
+needed.
 
-```bash
-# Install flyctl (PowerShell)
-iwr https://fly.io/install.ps1 -useb | iex
-
-# Auth + claim the app name (the one in fly.toml is generic — change if taken)
-fly auth login
-fly launch --copy-config --no-deploy --region iad
-
-# Persistent volume for the SQLite file (DATABASE_PATH=/data/production.sqlite3)
-fly volumes create lambda_data --size 1 --region iad
-
-# Secrets (NEVER bake into the image; rotate at AI Studio if exposed)
-fly secrets set GEMINI_API_KEY=<your-key>
-
-fly deploy
+```
+1. Push the repo to GitHub.
+2. https://dashboard.render.com → New → Blueprint → connect this repo.
+3. Render reads render.yaml and provisions the web service.
+4. In the new service's Environment tab, set GEMINI_API_KEY = <your key>.
+5. First request: visit the URL → /anchor → upload the XLSX → /closes.
 ```
 
-The `bin/start` entrypoint migrates on every boot (idempotent) and seeds
-on the first boot only (`Customer.count.zero?` check). The container does
-NOT pull a fresh XLSX from anywhere — the file ships in the image build,
-so anyone deploying their own copy needs `Helix_Anchor_Dataset_CANDIDATE.xlsx`
-in the project root before running `fly deploy`.
+**Free-tier trade-off**: ephemeral disk + 15-min idle spin-down. Cold
+boots wipe SQLite, so the reviewer re-uploads the anchor XLSX on the
+first visit of each demo session. `bin/start` migrates on every boot
+but does NOT auto-seed — uploads are the only way data lands. For a
+demo this is actually a feature: each session starts clean.
+
+For persistent state, switch the Render service to the `starter` plan
+($7/mo) and add a managed disk; or move to a host with persistent
+volumes (Fly Hobby, Railway).
 
 ## Known limitations
 
