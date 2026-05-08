@@ -46,17 +46,20 @@ class Seeder
     end
   end
 
-  def self.run!(path: ANCHOR_PATH, log: ->(m) { puts m })
-    new(path: path, log: log).call
+  MODES = %i[replace append].freeze
+
+  def self.run!(path: ANCHOR_PATH, log: ->(m) { puts m }, mode: :replace)
+    new(path: path, log: log, mode: mode).call
   end
 
   def self.validate!(path:)
     new(path: path, log: ->(_) {}).validate!
   end
 
-  def initialize(path:, log:)
+  def initialize(path:, log:, mode: :replace)
     @path = path
     @log  = log
+    @mode = MODES.include?(mode) ? mode : :replace
   end
 
   def validate!
@@ -105,9 +108,16 @@ class Seeder
 
   private
 
+  # In :append mode, returns true if a row matching `lookup` already exists
+  # so the caller should skip the insert. Always false in :replace mode.
+  def skip?(model_class, lookup)
+    @mode == :append && model_class.where(lookup).any?
+  end
+
   def seed_customers
     each_row('customers') do |row|
       customer_id, name, currency, country, status, billing_anchor = row
+      next if skip?(Customer, customer_id: customer_id)
       Customer.create(
         customer_id:    customer_id,
         name:           name,
@@ -123,6 +133,7 @@ class Seeder
   def seed_skus
     each_row('sku_price_book') do |row|
       sku, unit, list_unit_price_usd, category = row
+      next if skip?(Sku, sku: sku)
       Sku.create(
         sku:                 sku,
         unit:                unit,
@@ -135,6 +146,7 @@ class Seeder
   def seed_vendors
     each_row('vendors') do |row|
       vendor_id, name, category, currency, default_gl_account, default_department = row
+      next if skip?(Vendor, vendor_id: vendor_id)
       Vendor.create(
         vendor_id:          vendor_id,
         name:               name,
@@ -149,6 +161,7 @@ class Seeder
   def seed_gl_accounts
     each_row('gl_accounts') do |row|
       account_code, name, account_type = row
+      next if skip?(GlAccount, account_code: account_code.to_s)
       GlAccount.create(
         account_code: account_code.to_s,
         name:         name,
@@ -161,6 +174,7 @@ class Seeder
   # rates across March 2026 so any rate lookup in the period finds a row.
   def seed_fx_rates
     (Date.new(2026, 3, 1)..Date.new(2026, 3, 31)).each do |d|
+      next if skip?(FxRate, from_ccy: 'EUR', to_ccy: 'USD', effective_date: d)
       FxRate.create(
         from_ccy:       'EUR',
         to_ccy:         'USD',
@@ -173,6 +187,7 @@ class Seeder
   def seed_chargebee_invoices
     each_row('chargebee_invoices') do |row|
       invoice_id, customer_code, period_start, period_end, issued_at, subtotal_usd, currency, fx_to_usd = row
+      next if skip?(ChargebeeInvoice, invoice_id: invoice_id)
       ChargebeeInvoice.create(
         invoice_id:   invoice_id,
         customer_id:  customer_pk(customer_code),
@@ -189,6 +204,7 @@ class Seeder
   def seed_purchase_orders
     each_row('purchase_orders') do |row|
       po_number, vendor_code, po_type, department, gl_account, currency, po_total_usd, po_status = row
+      next if skip?(PurchaseOrder, po_number: po_number)
       PurchaseOrder.create(
         po_number:       po_number,
         vendor_id:       Vendor.where(vendor_id: vendor_code).first.id,
@@ -205,8 +221,11 @@ class Seeder
   def seed_po_lines
     each_row('po_lines') do |row|
       po_number, po_line_ref, description, qty, uom, unit_price_usd, line_total_usd = row
+      po = PurchaseOrder.where(po_number: po_number).first
+      next if po.nil?  # PO row may have been skipped in append mode
+      next if skip?(PoLine, purchase_order_id: po.id, po_line_ref: po_line_ref)
       PoLine.create(
-        purchase_order_id: PurchaseOrder.where(po_number: po_number).first.id,
+        purchase_order_id: po.id,
         po_line_ref:       po_line_ref,
         description:       description,
         qty:               to_decimal(qty),
@@ -220,6 +239,7 @@ class Seeder
   def seed_goods_receipts
     each_row('goods_receipts') do |row|
       receipt_id, po_number, po_line_ref, received_qty, received_on, value_usd, notes = row
+      next if skip?(GoodsReceipt, receipt_id: receipt_id)
       po      = PurchaseOrder.where(po_number: po_number).first
       po_line = PoLine.where(purchase_order_id: po.id, po_line_ref: po_line_ref).first
       GoodsReceipt.create(
@@ -237,6 +257,7 @@ class Seeder
     each_row('vendor_invoices') do |row|
       invoice_number, vendor_code, po_number, invoice_date, subtotal_usd, status = row
       next if invoice_number.nil? || invoice_number.to_s.strip.empty?
+      next if skip?(VendorInvoice, invoice_number: invoice_number)
       VendorInvoice.create(
         invoice_number:    invoice_number,
         vendor_id:         Vendor.where(vendor_id: vendor_code).first.id,
@@ -251,6 +272,7 @@ class Seeder
   def seed_anchor_usage_events
     each_row('usage_events') do |row|
       event_id, customer_code, sku_code, quantity, occurred_on = row
+      next if skip?(UsageEvent, event_id: event_id)
       UsageEvent.create(
         event_id:    event_id,
         customer_id: customer_pk(customer_code),
@@ -262,6 +284,10 @@ class Seeder
   end
 
   def seed_synthetic_history
+    # Once seeded, never regenerate -- the synthetic events have deterministic
+    # IDs and would conflict on re-run regardless of mode.
+    return if UsageEvent.where(Sequel.like(:event_id, 'evt_synth_%')).any?
+
     rng = Random.new(SYNTHETIC_RNG_SEED)
 
     CUSTOMER_BASELINES.each do |customer_code, params|

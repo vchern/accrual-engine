@@ -193,6 +193,8 @@ module Lambda
       original = file[:filename].to_s
       halt 400, 'must be a .xlsx file' unless original.downcase.end_with?('.xlsx')
 
+      mode = params[:mode] == 'append' ? :append : :replace
+
       FileUtils.cp(file[:tempfile].path, UPLOAD_PATH)
 
       # Validate BEFORE wiping any data — a malformed file leaves the existing
@@ -206,10 +208,12 @@ module Lambda
         return erb :'import/show'
       end
 
+      # Single transaction wrapping wipe + seed — if seed fails, the wipe
+      # rolls back too, so we never end up with a half-empty DB.
       DB.transaction do
-        ALL_TABLES.each { |t| DB[t].delete }
+        ALL_TABLES.each { |t| DB[t].delete } if mode == :replace
+        Seeder.run!(path: UPLOAD_PATH, log: ->(_) {}, mode: mode)
       end
-      Seeder.run!(path: UPLOAD_PATH, log: ->(_) {})
 
       redirect '/closes'
     end
