@@ -20,3 +20,5 @@ node_modules/
 .claude/
 .ruby-lsp/
 *.xlsx
+# Whitelist the bundled sample so the deployed demo has a one-click data source.
+!Helix_Anchor_Dataset_CANDIDATE.xlsx

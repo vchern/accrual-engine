@@ -135,11 +135,16 @@ module Lambda
       fx_rates gl_accounts vendors skus customers
     ].freeze
 
-    UPLOAD_PATH = File.join(Dir.tmpdir, 'lambda_uploaded_anchor.xlsx').freeze
+    UPLOAD_PATH        = File.join(Dir.tmpdir, 'lambda_uploaded_anchor.xlsx').freeze
+    SAMPLE_ANCHOR_PATH = File.join(ROOT, 'Helix_Anchor_Dataset_CANDIDATE.xlsx').freeze
 
     helpers do
       def reference_loaded?
         Customer.count.positive? && Sku.count.positive?
+      end
+
+      def sample_anchor_available?
+        File.exist?(SAMPLE_ANCHOR_PATH)
       end
     end
 
@@ -169,6 +174,17 @@ module Lambda
         ALL_TABLES.each { |t| DB[t].delete }
       end
       Seeder.run!(path: UPLOAD_PATH, log: ->(_) {})
+
+      redirect '/closes'
+    end
+
+    post '/anchor/sample' do
+      halt 404, 'No bundled sample available' unless sample_anchor_available?
+
+      DB.transaction do
+        ALL_TABLES.each { |t| DB[t].delete }
+      end
+      Seeder.run!(path: SAMPLE_ANCHOR_PATH, log: ->(_) {})
 
       redirect '/closes'
     end

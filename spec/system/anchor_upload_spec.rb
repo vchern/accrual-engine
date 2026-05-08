@@ -61,4 +61,21 @@ RSpec.describe 'Anchor upload flow', type: :request do
     f&.close
     f&.unlink
   end
+
+  it 'POST /anchor/sample loads the bundled XLSX' do
+    expect(File.exist?(File.join(ROOT, 'Helix_Anchor_Dataset_CANDIDATE.xlsx'))).to be true
+    expect(Customer.count).to eq(0)
+
+    post '/anchor/sample'
+    expect(last_response.status).to eq(302)
+    expect(last_response.headers['Location']).to end_with('/closes')
+    expect(Customer.count).to eq(3)
+    expect(GoodsReceipt.count).to eq(1)
+  end
+
+  it 'GET /anchor shows the sample-load button when the file is present' do
+    get '/anchor'
+    expect(last_response.body).to include('Load sample data')
+    expect(last_response.body).to include('/anchor/sample')
+  end
 end
