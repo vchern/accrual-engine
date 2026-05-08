@@ -2,7 +2,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DB_PATH="${DATABASE_PATH:-/data/production.sqlite3}"
+# Default to a path inside the project tree (writable on Render free tier
+# and matches config/database.rb's fallback). For hosts with a persistent
+# volume, set DATABASE_PATH to e.g. /data/production.sqlite3.
+DB_PATH="${DATABASE_PATH:-./db/production.sqlite3}"
 mkdir -p "$(dirname "$DB_PATH")"
 
 echo "[start] migrating ${APP_ENV:-production} db at ${DB_PATH}..."
@@ -14,5 +17,5 @@ bundle exec rake db:migrate
 # explicitly to drop, migrate, and seed from the local XLSX.
 echo "[start] skipping auto-seed (import via /import)"
 
-echo "[start] launching rackup on port ${PORT:-9292}..."
-exec bundle exec rackup -p "${PORT:-9292}" -o 0.0.0.0 -E "${APP_ENV:-production}"
+echo "[start] launching puma on port ${PORT:-9292}..."
+exec bundle exec puma -C config/puma.rb
