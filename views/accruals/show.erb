@@ -25,9 +25,20 @@
   </div>
 
   <% if @accrual.flagged? %>
-    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-      <div class="font-medium">Flagged for review</div>
-      <div class="mt-1"><%= @accrual.flagged_reason %></div>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-2">
+      <div>
+        <div class="font-medium">Flagged for review</div>
+        <div class="mt-1"><%= @accrual.flagged_reason %></div>
+      </div>
+      <% if @accrual.review_narration && !@accrual.review_narration.empty? %>
+        <div class="border-t border-amber-200 pt-2">
+          <div class="text-xs uppercase tracking-wide font-medium text-amber-700">
+            AI review note
+            <span class="text-amber-600 normal-case font-normal">&middot; <%= @accrual.review_narration_model %></span>
+          </div>
+          <p class="mt-1 italic text-amber-900"><%= @accrual.review_narration %></p>
+        </div>
+      <% end %>
     </div>
   <% end %>
 

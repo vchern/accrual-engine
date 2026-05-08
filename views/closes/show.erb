@@ -56,19 +56,26 @@
     </div>
 
     <% if @flagged_count.positive? %>
-      <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-3">
         <div class="font-medium">Flagged accruals</div>
-        <ul class="mt-2 space-y-1">
-          <% @accruals.select { |a| a.status == 'flagged' }.each do |a| %>
-            <li>
+        <% @accruals.select { |a| a.status == 'flagged' }.each do |a| %>
+          <div class="border-l-2 border-amber-300 pl-3">
+            <div>
               <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="font-medium underline">
                 <%= accrual_label(a) %>
               </a>
               <span class="num"><%= usd(a.amount_usd) %></span>
-              &mdash; <%= a.flagged_reason %>
-            </li>
-          <% end %>
-        </ul>
+              <span class="text-amber-800"> &mdash; <%= a.flagged_reason %></span>
+            </div>
+            <% if a.review_narration && !a.review_narration.empty? %>
+              <div class="mt-1 text-amber-900 italic">
+                <span class="text-xs uppercase tracking-wide not-italic font-medium text-amber-700">AI review note</span>
+                <span class="text-xs text-amber-600 not-italic">&middot; <%= a.review_narration_model %></span>
+                <div class="mt-0.5"><%= a.review_narration %></div>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
       </div>
     <% end %>
 

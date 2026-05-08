@@ -29,6 +29,7 @@ module Accruals
       audit(:run_completed,
             accruals: Accrual.where(close_run_id: @close_run.id).count,
             journal_entries: JournalEntry.where(close_run_id: @close_run.id).count)
+      narrate_flagged_accruals
       @close_run.refresh
     rescue StandardError => e
       mark_failed(e)
@@ -148,6 +149,35 @@ module Accruals
     def mark_failed(error)
       @close_run.update(status: 'failed')
       audit :run_failed, error: error.message, backtrace: Array(error.backtrace).first(5)
+    end
+
+    # Best-effort: ask the LLM narrator for a Controller-grade summary of
+    # each newly-flagged accrual. Run *outside* the engine transaction so
+    # an LLM error never rolls back the close. Skip if no API key.
+    def narrate_flagged_accruals
+      flagged = Accrual.where(
+        close_run_id:     @close_run.id,
+        status:           'flagged',
+        review_narration: nil
+      ).all
+      return if flagged.empty?
+
+      narrator = Accruals::ReviewNarrator.new
+      flagged.each do |accrual|
+        result = narrator.narrate(accrual)
+        next if result.nil?
+
+        if result.error
+          audit(:review_narration_failed, accrual_id: accrual.id, error: result.error)
+        else
+          accrual.update(
+            review_narration:       result.text,
+            review_narration_at:    Time.now.utc,
+            review_narration_model: result.model
+          )
+          audit(:review_narration_added, accrual_id: accrual.id, model: result.model)
+        end
+      end
     end
 
     def audit(action, payload = {})

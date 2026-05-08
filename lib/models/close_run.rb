@@ -5,11 +5,16 @@ class CloseRun < Sequel::Model
 
   STATUSES = %w[pending running completed failed].freeze
 
-  # The window of dates between the most-recent invoice end + 1 and period_end.
-  # For the anchor: most recent invoice covered up to 2026-03-28 → window is Mar 29-31.
+  # Window of dates that should accrue at this close: from (last invoice
+  # end + 1) OR the first day of period_end's calendar month — whichever
+  # is later — through period_end. Calendar-month bound prevents an Apr 30
+  # close from sweeping in already-handled March events when no April
+  # invoices have been issued yet.
   def unbilled_window
-    last_invoice_end = ChargebeeInvoice.max(:period_end)
-    start_date = last_invoice_end ? Date.parse(last_invoice_end.to_s) + 1 : period_start
+    last_invoice_end  = ChargebeeInvoice.max(:period_end)
+    earliest_unbilled = last_invoice_end ? Date.parse(last_invoice_end.to_s) + 1 : period_start
+    month_start       = Date.new(period_end.year, period_end.month, 1)
+    start_date        = [earliest_unbilled, month_start].max
     (start_date..period_end)
   end
 

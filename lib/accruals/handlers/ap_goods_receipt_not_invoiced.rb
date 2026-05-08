@@ -41,7 +41,7 @@ module Accruals
         raise "PO #{po.po_number} references unknown GL #{po.gl_account_code}" unless debit_account
 
         Accruals::DraftAccrual.new(
-          idempotency_key:      "ap_gr_not_invoiced|#{receipt.receipt_id}",
+          idempotency_key:      "ap_gr_not_invoiced|#{period_end}|#{receipt.receipt_id}",
           handler_name:         self.class.handler_name,
           entity_kind:          'ap',
           status:               'posted',

@@ -60,6 +60,28 @@ RSpec.describe 'End-to-end close against the Helix anchor' do
     expect(second_total).to eq(first_total)
   end
 
+  it 'a different period_end is calendar-month-bounded' do
+    Accruals::Engine.new(close_run).run!  # Mar 31 close
+
+    apr_close = CloseRun.create(
+      period_start: Date.new(2026, 4, 1),
+      period_end:   Date.new(2026, 4, 30),
+      status:       'pending'
+    )
+    Accruals::Engine.new(apr_close).run!
+
+    # AR window is Apr 1..Apr 30 — no events in April, so no AR accruals.
+    expect(Accrual.where(close_run_id: apr_close.id, entity_kind: 'ar').count).to eq(0)
+
+    # AP receipt is still uninvoiced → re-accrued under a period-scoped key.
+    ap = Accrual.where(close_run_id: apr_close.id, entity_kind: 'ap').first
+    expect(ap.amount_usd).to eq(BigDecimal('100000.00'))
+    expect(ap.idempotency_key).to start_with('ap_gr_not_invoiced|2026-04-30|')
+
+    # March's AP accrual is preserved (different idempotency key per period).
+    expect(Accrual.where(close_run_id: close_run.id, entity_kind: 'ap').count).to eq(1)
+  end
+
   it 'CSV export covers every line and balances DR/CR' do
     Accruals::Engine.new(close_run).run!
     csv_text = Accruals::JournalCsvExporter.call(close_run)
