@@ -10,6 +10,8 @@ require_relative '../app'
 require 'rspec'
 require 'rack/test'
 
+Dir[File.join(__dir__, 'support', '**', '*.rb')].sort.each { |f| require f }
+
 RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
@@ -36,4 +38,7 @@ module RackHelpers
   end
 end
 
-RSpec.configure { |c| c.include RackHelpers, type: :request }
+RSpec.configure do |c|
+  c.include RackHelpers, type: :request
+  c.include Fixtures
+end
