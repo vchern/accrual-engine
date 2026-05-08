@@ -4,13 +4,13 @@ class FxRate < Sequel::Model
   def self.lookup!(from_ccy:, to_ccy:, as_of:)
     return BigDecimal('1') if from_ccy == to_ccy
 
-    rate = where(from_ccy: from_ccy, to_ccy: to_ccy)
-           .where(Sequel[:effective_date] <= as_of)
-           .reverse(:effective_date)
-           .first
+    record = where(from_ccy: from_ccy, to_ccy: to_ccy)
+             .where(Sequel[:effective_date] <= as_of)
+             .reverse(:effective_date)
+             .first
 
-    raise "No FX rate for #{from_ccy}->#{to_ccy} on or before #{as_of}" unless rate
+    raise "No FX rate for #{from_ccy}->#{to_ccy} on or before #{as_of}" unless record
 
-    rate
+    record.rate
   end
 end
