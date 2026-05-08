@@ -1,0 +1,145 @@
+<div class="space-y-6">
+  <div>
+    <a href="/closes/<%= @close_run.id %>?tab=accruals" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to accruals</a>
+  </div>
+
+  <div class="flex items-start justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-semibold tracking-tight"><%= accrual_label(@accrual) %></h1>
+        <%= entity_pill(@accrual.entity_kind) %>
+        <%= status_pill(@accrual.status) %>
+      </div>
+      <p class="text-slate-500 text-sm mt-1"><%= @accrual.memo %></p>
+    </div>
+    <div class="text-right">
+      <div class="text-xs uppercase tracking-wide text-slate-500">Amount USD</div>
+      <div class="text-3xl font-semibold num mt-1"><%= usd(@accrual.amount_usd) %></div>
+      <% if @accrual.billing_currency != 'USD' %>
+        <div class="text-xs text-slate-500 num mt-0.5">
+          <%= num(@accrual.amount_billing_ccy) %> <%= @accrual.billing_currency %>
+          @ FX <%= num(@accrual.fx_rate, dp: 4) %> on <%= date_str(@accrual.fx_rate_date) %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <% if @accrual.flagged? %>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <div class="font-medium">Flagged for review</div>
+      <div class="mt-1"><%= @accrual.flagged_reason %></div>
+    </div>
+  <% end %>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-5">
+      <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">GL coding</div>
+      <div class="text-sm space-y-1">
+        <div><span class="text-slate-500">DR</span>
+          <span class="num font-medium"><%= GlAccount[@accrual.gl_debit_account_id]&.account_code %></span>
+          <span class="text-slate-700"><%= GlAccount[@accrual.gl_debit_account_id]&.name %></span>
+        </div>
+        <div><span class="text-slate-500">CR</span>
+          <span class="num font-medium"><%= GlAccount[@accrual.gl_credit_account_id]&.account_code %></span>
+          <span class="text-slate-700"><%= GlAccount[@accrual.gl_credit_account_id]&.name %></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-slate-200 bg-white p-5">
+      <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Idempotency key</div>
+      <div class="text-sm font-mono text-slate-700 break-all"><%= @accrual.idempotency_key %></div>
+      <div class="text-xs text-slate-500 mt-2">
+        Handler: <span class="font-medium text-slate-700"><%= @accrual.handler_name %></span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-2">Source records (<%= @sources.size %>)</h2>
+    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Type</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">ID</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Detail</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @sources.each do |link, record| %>
+            <tr>
+              <td class="px-4 py-2.5 text-slate-700"><%= link.source_type %></td>
+              <td class="px-4 py-2.5 num text-slate-700"><%= link.source_id %></td>
+              <td class="px-4 py-2.5 text-slate-700">
+                <% case link.source_type %>
+                <% when 'UsageEvent' %>
+                  <% if record %>
+                    <span class="num text-slate-500"><%= date_str(record.occurred_on) %></span>
+                    &middot;
+                    <span class="font-medium"><%= Customer[record.customer_id].customer_id %></span>
+                    &middot;
+                    <%= Sku[record.sku_id].sku %>
+                    &middot;
+                    qty <span class="num"><%= num(record.quantity, dp: 2) %></span>
+                  <% end %>
+                <% when 'GoodsReceipt' %>
+                  <% if record %>
+                    <span class="font-medium"><%= record.receipt_id %></span>
+                    &middot; <%= date_str(record.received_on) %>
+                    &middot; received <span class="num"><%= num(record.received_qty, dp: 0) %></span>
+                    &middot; value <span class="num"><%= usd(record.value_usd) %></span>
+                  <% end %>
+                <% when 'PoLine' %>
+                  <% if record %>
+                    <span class="font-medium"><%= record.purchase_order.po_number %></span>
+                    line <%= record.po_line_ref %>
+                    &middot; <%= record.description %>
+                    &middot; qty <span class="num"><%= num(record.qty, dp: 0) %></span>
+                    @ <span class="num"><%= usd(record.unit_price_usd) %></span>
+                  <% end %>
+                <% else %>
+                  <%= record&.inspect %>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-2">Journal entries</h2>
+    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">JE #</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Type</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Date</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Account</th>
+            <th class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-slate-500">DR</th>
+            <th class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-slate-500">CR</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @journal_entries.each do |je| %>
+            <% je.journal_lines.sort_by(&:id).each_with_index do |line, idx| %>
+              <tr>
+                <td class="px-4 py-2.5 text-slate-700 num"><%= idx.zero? ? je.id : '' %></td>
+                <td class="px-4 py-2.5"><%= idx.zero? ? status_pill(je.entry_type) : '' %></td>
+                <td class="px-4 py-2.5 text-slate-700 num"><%= idx.zero? ? date_str(je.entry_date) : '' %></td>
+                <td class="px-4 py-2.5 text-slate-700 num">
+                  <%= line.gl_account.account_code %> <span class="text-slate-500"><%= line.gl_account.name %></span>
+                </td>
+                <td class="px-4 py-2.5 text-right num"><%= line.debit_amount_usd.zero? ? '<span class="text-slate-300">&mdash;</span>' : usd(line.debit_amount_usd) %></td>
+                <td class="px-4 py-2.5 text-right num"><%= line.credit_amount_usd.zero? ? '<span class="text-slate-300">&mdash;</span>' : usd(line.credit_amount_usd) %></td>
+              </tr>
+            <% end %>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

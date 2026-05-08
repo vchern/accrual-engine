@@ -1,0 +1,199 @@
+<div class="space-y-6">
+  <div>
+    <a href="/closes" class="text-sm text-slate-500 hover:text-slate-700">&larr; All closes</a>
+  </div>
+
+  <div class="flex items-start justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-semibold tracking-tight"><%= date_str(@close_run.period_end) %></h1>
+        <%= status_pill(@close_run.status) %>
+      </div>
+      <p class="text-slate-500 text-sm mt-1 num">
+        Started <%= datetime(@close_run.started_at) %> &middot;
+        Completed <%= datetime(@close_run.completed_at) %>
+      </p>
+    </div>
+    <div class="text-right">
+      <div class="text-xs uppercase tracking-wide text-slate-500">Total accrual</div>
+      <div class="text-3xl font-semibold text-slate-900 num mt-1"><%= usd(@total_usd) %></div>
+      <a href="/closes/<%= @close_run.id %>/journal_entries.csv"
+         class="inline-flex items-center mt-2 text-sm text-slate-700 hover:text-slate-900 font-medium">
+        Download journal CSV &rarr;
+      </a>
+    </div>
+  </div>
+
+  <div class="border-b border-slate-200">
+    <nav class="-mb-px flex gap-6">
+      <%= tab_link(@close_run, 'Overview',         'overview',        current: @tab) %>
+      <%= tab_link(@close_run, 'Accruals',         'accruals',        count: @accruals.size,        current: @tab) %>
+      <%= tab_link(@close_run, 'Journal entries',  'journal',         count: @journal_entries.size, current: @tab) %>
+      <%= tab_link(@close_run, 'Audit log',        'audit',           count: @audit_events.size,    current: @tab) %>
+    </nav>
+  </div>
+
+  <% case @tab %>
+  <% when 'overview' %>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="rounded-lg border border-slate-200 bg-white p-5">
+        <div class="text-xs uppercase tracking-wide text-slate-500">AR accruals</div>
+        <div class="text-2xl font-semibold mt-1 num"><%= @ar_count %></div>
+        <% ar_total = @accruals.select { |a| a.entity_kind == 'ar' }.map(&:amount_usd).reduce(BigDecimal('0'), :+) %>
+        <div class="text-sm text-slate-600 mt-1 num"><%= usd(ar_total) %></div>
+      </div>
+      <div class="rounded-lg border border-slate-200 bg-white p-5">
+        <div class="text-xs uppercase tracking-wide text-slate-500">AP accruals</div>
+        <div class="text-2xl font-semibold mt-1 num"><%= @ap_count %></div>
+        <% ap_total = @accruals.select { |a| a.entity_kind == 'ap' }.map(&:amount_usd).reduce(BigDecimal('0'), :+) %>
+        <div class="text-sm text-slate-600 mt-1 num"><%= usd(ap_total) %></div>
+      </div>
+      <div class="rounded-lg border border-slate-200 bg-white p-5">
+        <div class="text-xs uppercase tracking-wide text-slate-500">Flagged for review</div>
+        <div class="text-2xl font-semibold mt-1 num <%= @flagged_count.positive? ? 'text-amber-700' : '' %>"><%= @flagged_count %></div>
+        <div class="text-sm text-slate-600 mt-1">requires accountant review</div>
+      </div>
+    </div>
+
+    <% if @flagged_count.positive? %>
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div class="font-medium">Flagged accruals</div>
+        <ul class="mt-2 space-y-1">
+          <% @accruals.select { |a| a.status == 'flagged' }.each do |a| %>
+            <li>
+              <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="font-medium underline">
+                <%= accrual_label(a) %>
+              </a>
+              <span class="num"><%= usd(a.amount_usd) %></span>
+              &mdash; <%= a.flagged_reason %>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
+
+  <% when 'accruals' %>
+    <% all_count = @accruals.size %>
+    <% rows = case @filter
+              when 'ar'      then @accruals.select { |a| a.entity_kind == 'ar' }
+              when 'ap'      then @accruals.select { |a| a.entity_kind == 'ap' }
+              when 'flagged' then @accruals.select { |a| a.status == 'flagged' }
+              else                @accruals
+              end %>
+    <div class="flex items-center gap-2">
+      <%= filter_chip(@close_run, 'All',     'all',     all_count,     current: @filter) %>
+      <%= filter_chip(@close_run, 'AR',      'ar',      @ar_count,     current: @filter) %>
+      <%= filter_chip(@close_run, 'AP',      'ap',      @ap_count,     current: @filter) %>
+      <%= filter_chip(@close_run, 'Flagged', 'flagged', @flagged_count, current: @filter) %>
+    </div>
+
+    <% if rows.empty? %>
+      <div class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+        No accruals match this filter.
+      </div>
+    <% else %>
+      <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Source</th>
+              <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Handler</th>
+              <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Status</th>
+              <th class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Amount USD</th>
+              <th class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Billing</th>
+              <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">DR / CR</th>
+              <th class="px-4 py-2.5"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% rows.each do |a| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-2">
+                    <%= entity_pill(a.entity_kind) %>
+                    <span class="font-medium text-slate-900"><%= accrual_label(a) %></span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-0.5"><%= a.memo %></div>
+                </td>
+                <td class="px-4 py-3 text-slate-700"><%= a.handler_name %></td>
+                <td class="px-4 py-3"><%= status_pill(a.status) %></td>
+                <td class="px-4 py-3 text-right font-medium num"><%= usd(a.amount_usd) %></td>
+                <td class="px-4 py-3 text-right num text-slate-600">
+                  <%= num(a.amount_billing_ccy) %> <span class="text-xs text-slate-400"><%= a.billing_currency %></span>
+                  <% if a.billing_currency != 'USD' %>
+                    <div class="text-xs text-slate-400">FX <%= num(a.fx_rate, dp: 4) %></div>
+                  <% end %>
+                </td>
+                <td class="px-4 py-3 text-xs text-slate-600 num">
+                  DR <%= GlAccount[a.gl_debit_account_id]&.account_code %> /
+                  CR <%= GlAccount[a.gl_credit_account_id]&.account_code %>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="text-slate-700 hover:text-slate-900 font-medium">Sources &rarr;</a>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+
+  <% when 'journal' %>
+    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">JE #</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Type</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Date</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Account</th>
+            <th class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-slate-500">DR</th>
+            <th class="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-slate-500">CR</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Memo</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @journal_entries.each do |je| %>
+            <% je.journal_lines.sort_by(&:id).each_with_index do |line, idx| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-2.5 text-slate-700 num"><%= idx.zero? ? je.id : '' %></td>
+                <td class="px-4 py-2.5"><%= idx.zero? ? status_pill(je.entry_type) : '' %></td>
+                <td class="px-4 py-2.5 text-slate-700 num"><%= idx.zero? ? date_str(je.entry_date) : '' %></td>
+                <td class="px-4 py-2.5 text-slate-700 num">
+                  <%= line.gl_account.account_code %> <span class="text-slate-500"><%= line.gl_account.name %></span>
+                </td>
+                <td class="px-4 py-2.5 text-right num"><%= line.debit_amount_usd.zero? ? '<span class="text-slate-300">&mdash;</span>' : usd(line.debit_amount_usd) %></td>
+                <td class="px-4 py-2.5 text-right num"><%= line.credit_amount_usd.zero? ? '<span class="text-slate-300">&mdash;</span>' : usd(line.credit_amount_usd) %></td>
+                <td class="px-4 py-2.5 text-slate-500 text-xs"><%= line.memo %></td>
+              </tr>
+            <% end %>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+
+  <% when 'audit' %>
+    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Timestamp</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Actor</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Action</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Payload</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @audit_events.each do |ev| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-2.5 text-slate-600 num"><%= datetime(ev.created_at) %></td>
+              <td class="px-4 py-2.5 text-slate-600"><%= ev.actor %></td>
+              <td class="px-4 py-2.5 text-slate-900 font-medium"><%= ev.action %></td>
+              <td class="px-4 py-2.5 text-xs text-slate-500 font-mono"><%= ev.payload_data.to_json %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</div>

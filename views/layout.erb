@@ -7,12 +7,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .num { font-variant-numeric: tabular-nums; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-slate-50 text-slate-900 min-h-screen">
   <header class="border-b border-slate-200 bg-white">
-    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-      <a href="/" class="font-semibold tracking-tight text-slate-900">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <a href="/closes" class="font-semibold tracking-tight text-slate-900">
         Lambda <span class="text-slate-400">/</span> Accrual Engine
       </a>
       <nav class="text-sm text-slate-600 space-x-4">
@@ -20,7 +21,7 @@
       </nav>
     </div>
   </header>
-  <main class="max-w-6xl mx-auto px-6 py-8">
+  <main class="max-w-7xl mx-auto px-6 py-8">
     <%= yield %>
   </main>
 </body>

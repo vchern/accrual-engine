@@ -10,10 +10,10 @@ RSpec.describe Lambda::App, type: :request do
   end
 
   describe 'GET /' do
-    it 'renders the home page' do
+    it 'redirects to /closes' do
       get '/'
-      expect(last_response.status).to eq(200)
-      expect(last_response.body).to include('Period close')
+      expect(last_response.status).to eq(302)
+      expect(last_response.headers['Location']).to end_with('/closes')
     end
   end
 end
