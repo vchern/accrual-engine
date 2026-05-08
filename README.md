@@ -13,11 +13,11 @@ controller-facing UI.
 
 Engine against `Helix_Anchor_Dataset_CANDIDATE.xlsx` for **period_end = 2026-03-31**:
 
-| Side | Source | Amount |
-| --- | --- | ---: |
-| AR | 3 customers · 7 events · Mar 29-31 | **$362.50** |
-| AP | GR-2026-0042 (2 of 5 servers received) | **$100,000.00** |
-| **Total** | | **$100,362.50** |
+| Side      | Source                                 |          Amount |
+| --------- | -------------------------------------- | --------------: |
+| AR        | 3 customers · 7 events · Mar 29-31     |     **$362.50** |
+| AP        | GR-2026-0042 (2 of 5 servers received) | **$100,000.00** |
+| **Total** |                                        | **$100,362.50** |
 
 - CUS-1001 Mar 30 lands `flagged` (25h vs ~10h median, z ≈ 6.1) but still accrues at the actual quantity per spec.
 - CUS-1002 (EUR) book in USD via FX 1.08 (price book is USD; EUR is display-only).
@@ -33,15 +33,16 @@ cd accrual-engine
 bin/setup                 # bundle install + db:migrate (no auto-seed in prod-like flow)
 cp .env.example .env      # optional — populate GEMINI_API_KEY for AI notes
 bundle exec rackup        # http://localhost:9292
-bundle exec rspec         # 60 specs, ~14 sec
+bundle exec rspec         # 62 specs, ~14 sec
 ```
 
-You also need `Helix_Anchor_Dataset_CANDIDATE.xlsx` *somewhere* on your
+You also need `Helix_Anchor_Dataset_CANDIDATE.xlsx` _somewhere_ on your
 disk. The app uploads it via the UI rather than reading from disk —
 gitignored binary data stays out of source control, and the same flow
 that works locally works in production.
 
 **UI flow**:
+
 1. Home → `/import` (auto-redirected on a clean DB)
 2. Either upload an XLSX or click **Load sample data** → seeder runs → redirected to `/closes`
 3. **Run engine** with `period_end=2026-03-31`
@@ -51,10 +52,10 @@ that works locally works in production.
 
 ## Stack
 
-- **Ruby 3.3 / Sinatra 4** (modular `Sinatra::Base`) — readable end-to-end; the handler-pluggability story is a Ruby concern, not a framework one.
-- **Sequel + SQLite** — Sinatra-idiomatic ORM; SQLite is production-viable on a single Fly volume at this scale.
+- **Ruby 3.3 / Sinatra 4** (modular `Sinatra::Base`) — readable end-to-end.
+- **Sequel + SQLite** — Sinatra-idiomatic ORM; SQLite is production-viable on a single persistent volume at this scale.
 - **BigDecimal everywhere** — `Float` is banned for money.
-- **Tailwind via CDN** — demo grade; production would compile.
+- **Tailwind (compiled)** — `tailwindcss-ruby` standalone binary; one ~15 KB minified `public/application.css` precompiled in Render's build step. No Node, no runtime CDN.
 - **RSpec + Rack::Test** — service, engine, integration, and HTTP-level system specs.
 - **Google Gemini 2.5 Flash** — grounded review narration for flagged accruals.
 
@@ -63,7 +64,7 @@ that works locally works in production.
 ```
 app.rb                       Sinatra app: routes, helpers
 config/                      boot, database connection
-db/migrations/               4 migrations, 14 tables
+db/migrations/               4 migrations, 17 tables
 db/seeds.rb                  XLSX → DB + 30 days synthetic prior-period usage
 lib/accruals/                engine, handler base, narrator, calendar, CSV
 lib/accruals/handlers/       pluggable handlers — one file per accrual type
@@ -75,7 +76,7 @@ Helix_Anchor_Dataset_CANDIDATE.xlsx   (gitignored — drop in to seed)
 
 ## AI review notes (Gemini)
 
-When the engine flags an accrual, it sends the *structured* anomaly signal
+When the engine flags an accrual, it sends the _structured_ anomaly signal
 (date, qty, median, z-score, customer label) to Gemini 2.5 Flash and asks
 for a 2-3 sentence Controller-grade note. The prompt forbids inventing
 amounts; the LLM only paraphrases the engine's facts. Result is cached on
@@ -88,7 +89,7 @@ hidden in the UI — everything else still works.
 ## Testing
 
 ```bash
-bundle exec rspec                        # all 53
+bundle exec rspec                        # all 62
 bundle exec rspec spec/integration       # asserts AR=$362.50, AP=$100,000
 bundle exec rspec spec/system            # HTTP-level UI flow
 ```
@@ -120,8 +121,8 @@ but does NOT auto-seed — uploads are the only way data lands. For a
 demo this is actually a feature: each session starts clean.
 
 For persistent state, switch the Render service to the `starter` plan
-($7/mo) and add a managed disk; or move to a host with persistent
-volumes (Fly Hobby, Railway).
+($7/mo) and add a managed disk, or swap SQLite for a managed Postgres
+(Render's own, Neon, Supabase) via a Sequel adapter change.
 
 ## Known limitations
 
