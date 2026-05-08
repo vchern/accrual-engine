@@ -114,7 +114,7 @@ module Lambda
     end
 
     get '/closes' do
-      redirect '/anchor' unless reference_loaded?
+      redirect '/import' unless reference_loaded?
       @closes = CloseRun.order(Sequel.desc(:created_at)).all
       @totals_by_close = @closes.each_with_object({}) do |c, h|
         accruals = Accrual.where(close_run_id: c.id).all
@@ -148,7 +148,7 @@ module Lambda
       end
     end
 
-    get '/anchor' do
+    get '/import' do
       @counts = {
         customers:        Customer.count,
         skus:             Sku.count,
@@ -158,10 +158,10 @@ module Lambda
         purchase_orders:  PurchaseOrder.count,
         goods_receipts:   GoodsReceipt.count
       }
-      erb :'anchor/show'
+      erb :'import/show'
     end
 
-    post '/anchor' do
+    post '/import' do
       file = params[:anchor_file]
       halt 400, 'anchor_file is required (multipart upload).' unless file && file[:tempfile]
 
@@ -178,7 +178,7 @@ module Lambda
       redirect '/closes'
     end
 
-    post '/anchor/sample' do
+    post '/import/sample' do
       halt 404, 'No bundled sample available' unless sample_anchor_available?
 
       DB.transaction do

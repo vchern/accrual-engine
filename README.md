@@ -42,8 +42,8 @@ gitignored binary data stays out of source control, and the same flow
 that works locally works in production.
 
 **UI flow**:
-1. Home → `/anchor` (auto-redirected on a clean DB)
-2. Upload the XLSX → seeder runs → redirected to `/closes`
+1. Home → `/import` (auto-redirected on a clean DB)
+2. Either upload an XLSX or click **Load sample data** → seeder runs → redirected to `/closes`
 3. **Run engine** with `period_end=2026-03-31`
 4. Overview shows totals + flagged banner → tabs for accruals / journal
    entries / audit log → drill-through to source UsageEvents and
@@ -110,7 +110,7 @@ needed.
 2. https://dashboard.render.com → New → Blueprint → connect this repo.
 3. Render reads render.yaml and provisions the web service.
 4. In the new service's Environment tab, set GEMINI_API_KEY = <your key>.
-5. First request: visit the URL → /anchor → upload the XLSX → /closes.
+5. First request: visit the URL → /import → upload the XLSX or click "Load sample data" → /closes.
 ```
 
 **Free-tier trade-off**: ephemeral disk + 15-min idle spin-down. Cold

@@ -8,10 +8,11 @@ mkdir -p "$(dirname "$DB_PATH")"
 echo "[start] migrating ${APP_ENV:-production} db at ${DB_PATH}..."
 bundle exec rake db:migrate
 
-# Production deploys do NOT auto-seed — the user uploads the anchor XLSX
-# via /anchor in the UI. For local dev, run `bundle exec rake db:setup`
+# Production deploys do NOT auto-seed — the user imports the source XLSX
+# via /import in the UI (or clicks 'Load sample data' for the bundled
+# Helix anchor). For local dev, run `bundle exec rake db:setup`
 # explicitly to drop, migrate, and seed from the local XLSX.
-echo "[start] skipping auto-seed (upload via /anchor)"
+echo "[start] skipping auto-seed (import via /import)"
 
 echo "[start] launching rackup on port ${PORT:-9292}..."
 exec bundle exec rackup -p "${PORT:-9292}" -o 0.0.0.0 -E "${APP_ENV:-production}"

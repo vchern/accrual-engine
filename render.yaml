@@ -3,8 +3,8 @@
 # pointed at this repo.
 #
 # Free plan caveat: ephemeral disk. SQLite resets on every cold boot
-# (15-min idle window). Reference data is uploaded via /anchor in the
-# UI on first visit; reseed by re-uploading the XLSX. For persistent
+# (15-min idle window). Reference data is imported via /import in the
+# UI on first visit; reseed by re-importing the XLSX. For persistent
 # state, switch the plan to `starter` and add a managed disk.
 
 services:

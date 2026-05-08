@@ -1,27 +1,27 @@
 require 'spec_helper'
 
-RSpec.describe 'Anchor upload flow', type: :request do
+RSpec.describe 'Data import flow', type: :request do
   let(:xlsx_path) { File.join(ROOT, 'Helix_Anchor_Dataset_CANDIDATE.xlsx') }
 
-  it 'GET /anchor renders the upload form on a clean DB' do
-    get '/anchor'
+  it 'GET /import renders the upload form on a clean DB' do
+    get '/import'
     expect(last_response).to be_ok
     expect(last_response.body).to include('No reference data loaded')
-    expect(last_response.body).to include('Upload &amp; seed')
+    expect(last_response.body).to include('Data import')
   end
 
-  it '/closes redirects to /anchor when no reference data is loaded' do
+  it '/closes redirects to /import when no reference data is loaded' do
     get '/closes'
     expect(last_response.status).to eq(302)
-    expect(last_response.headers['Location']).to end_with('/anchor')
+    expect(last_response.headers['Location']).to end_with('/import')
   end
 
-  it 'POST /anchor seeds the DB and redirects to /closes' do
+  it 'POST /import seeds the DB and redirects to /closes' do
     expect(Customer.count).to eq(0)
 
     file = Rack::Test::UploadedFile.new(xlsx_path,
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', true)
-    post '/anchor', anchor_file: file
+    post '/import', anchor_file: file
 
     expect(last_response.status).to eq(302)
     expect(last_response.headers['Location']).to end_with('/closes')
@@ -34,18 +34,18 @@ RSpec.describe 'Anchor upload flow', type: :request do
     expect(UsageEvent.count).to     be > 90  # 10 anchor + 90 synthetic
   end
 
-  it 'GET /anchor shows loaded counts after upload' do
+  it 'GET /import shows loaded counts after upload' do
     file = Rack::Test::UploadedFile.new(xlsx_path,
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', true)
-    post '/anchor', anchor_file: file
+    post '/import', anchor_file: file
 
-    get '/anchor'
+    get '/import'
     expect(last_response.body).to include('Reference data loaded')
     expect(last_response.body).to include('3 customers')
   end
 
   it 'rejects an upload missing the file param' do
-    post '/anchor'
+    post '/import'
     expect(last_response.status).to eq(400)
   end
 
@@ -55,27 +55,27 @@ RSpec.describe 'Anchor upload flow', type: :request do
     f.write('not an xlsx')
     f.rewind
     file = Rack::Test::UploadedFile.new(f.path, 'text/plain')
-    post '/anchor', anchor_file: file
+    post '/import', anchor_file: file
     expect(last_response.status).to eq(400)
   ensure
     f&.close
     f&.unlink
   end
 
-  it 'POST /anchor/sample loads the bundled XLSX' do
+  it 'POST /import/sample loads the bundled XLSX' do
     expect(File.exist?(File.join(ROOT, 'Helix_Anchor_Dataset_CANDIDATE.xlsx'))).to be true
     expect(Customer.count).to eq(0)
 
-    post '/anchor/sample'
+    post '/import/sample'
     expect(last_response.status).to eq(302)
     expect(last_response.headers['Location']).to end_with('/closes')
     expect(Customer.count).to eq(3)
     expect(GoodsReceipt.count).to eq(1)
   end
 
-  it 'GET /anchor shows the sample-load button when the file is present' do
-    get '/anchor'
+  it 'GET /import shows the sample-load button when the file is present' do
+    get '/import'
     expect(last_response.body).to include('Load sample data')
-    expect(last_response.body).to include('/anchor/sample')
+    expect(last_response.body).to include('/import/sample')
   end
 end
