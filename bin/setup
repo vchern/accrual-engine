@@ -4,8 +4,13 @@ cd "$(dirname "$0")/.."
 
 bundle install
 bundle exec rake db:setup
+bundle exec rake assets:tailwind
 echo
 echo "Setup complete. Run the app with:"
 echo "  bundle exec rackup"
+echo
+echo "For active CSS development (auto-rebuild on view edits):"
+echo "  bundle exec rake assets:watch    # in a separate terminal"
+echo
 echo "Run the test suite with:"
 echo "  bundle exec rspec"

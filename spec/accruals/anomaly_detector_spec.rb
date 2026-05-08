@@ -3,7 +3,9 @@ require 'spec_helper'
 RSpec.describe Accruals::AnomalyDetector do
   describe '#anomaly?' do
     it 'flags a clear outlier (CUS-1001 25h vs 10h baseline)' do
-      baseline = Array.new(20) { 10 + rand(-1..1) }
+      # Deterministic baseline with non-zero MAD (see seeder.rb's synthetic
+      # generation for the realistic shape).
+      baseline = [9, 10, 11, 10, 9, 11, 10, 12, 9, 10, 11, 10, 9, 10, 11, 10, 12, 9, 10, 11]
       detector = described_class.new(baseline: baseline)
       expect(detector.anomaly?(25)).to be true
     end

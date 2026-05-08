@@ -13,7 +13,7 @@ services:
     runtime: ruby
     plan: free
     region: oregon
-    buildCommand: bundle install
+    buildCommand: bundle install && bundle exec rake assets:tailwind
     startCommand: bin/start
     envVars:
       - key: APP_ENV

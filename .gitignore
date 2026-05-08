@@ -15,6 +15,7 @@ coverage/
 .rspec_status
 node_modules/
 *.swp
+public/application.css
 .idea/
 .vscode/
 .claude/

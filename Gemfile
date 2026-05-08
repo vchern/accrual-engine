@@ -24,6 +24,7 @@ gem 'roo', '~> 2.10'
 # Tooling
 gem 'rake', '~> 13.2'
 gem 'dotenv', '~> 3.1'
+gem 'tailwindcss-ruby', '~> 3.4'   # Standalone Tailwind binary, no Node.
 
 group :development, :test do
   gem 'rspec', '~> 3.13'

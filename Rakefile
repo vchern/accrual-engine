@@ -39,6 +39,22 @@ namespace :db do
   end
 end
 
+namespace :assets do
+  TAILWIND_INPUT  = 'tailwind/input.css'.freeze
+  TAILWIND_OUTPUT = 'public/application.css'.freeze
+  TAILWIND_CONFIG = 'tailwind/tailwind.config.js'.freeze
+
+  desc 'Compile Tailwind CSS once (minified)'
+  task :tailwind do
+    sh "bundle exec tailwindcss -i #{TAILWIND_INPUT} -o #{TAILWIND_OUTPUT} -c #{TAILWIND_CONFIG} --minify"
+  end
+
+  desc 'Watch Tailwind CSS in dev'
+  task :watch do
+    sh "bundle exec tailwindcss -i #{TAILWIND_INPUT} -o #{TAILWIND_OUTPUT} -c #{TAILWIND_CONFIG} --watch"
+  end
+end
+
 desc 'Run the test suite'
 task :spec do
   sh 'bundle exec rspec'
