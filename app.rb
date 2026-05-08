@@ -124,6 +124,15 @@ module Lambda
       erb :'closes/index'
     end
 
+    post '/closes/reset' do
+      DB.transaction do
+        %i[journal_lines journal_entries accrual_sources audit_events accruals close_runs].each do |t|
+          DB[t].delete
+        end
+      end
+      redirect '/closes'
+    end
+
     post '/closes' do
       period_end_str = params[:period_end].to_s.strip
       halt 400, 'period_end is required' if period_end_str.empty?

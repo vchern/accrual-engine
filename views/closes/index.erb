@@ -23,6 +23,16 @@
       <p class="text-slate-600">No closes yet. Pick a period above and click <strong>Run engine</strong>.</p>
     </div>
   <% else %>
+    <div class="flex items-center justify-end">
+      <form method="post" action="/closes/reset"
+            onsubmit="return confirm('Reset engine state? All close runs, accruals, journal entries, and audit events will be deleted. Reference data (customers, SKUs, usage events, POs, GL accounts) is preserved.');">
+        <button type="submit"
+                class="inline-flex items-center rounded-md bg-red-600 text-white text-sm font-medium px-4 py-2 hover:bg-red-700 shadow-sm">
+          Reset engine state
+        </button>
+      </form>
+    </div>
+
     <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <table class="min-w-full divide-y divide-slate-200">
         <thead class="bg-slate-50">
