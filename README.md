@@ -5,9 +5,9 @@ Single-engine accrual computation for **AR** (usage-event-based) and **AP**
 Helix Compute Inc., with NetSuite-friendly journal CSV export and a
 controller-facing UI.
 
+- **Live URL**: https://accrual-engine.onrender.com
 - **Repository**: https://github.com/vchern/accrual-engine
 - **Architecture write-up**: [ARCHITECTURE.md](ARCHITECTURE.md)
-- **Live URL**: _to follow once phase 7 deploy lands_
 
 ## Run-against targets
 

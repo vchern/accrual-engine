@@ -13,7 +13,7 @@ Both reduce to the same shape: _given the data we have, what's the closest-to-ac
 
 | Choice                      | Why                                                                                                                                                                                                                                                         |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sinatra over Rails**      | I chose Sinatra because it is lightweight and quick to prototype. For creating small focused applications, Sinatra is a better choice over rails.                                                                                                           |
+| **Sinatra over Rails**      | I chose Sinatra because it is lightweight and quick to prototype. For creating small focused applications, Sinatra is a better choice over Rails.                                                                                                           |
 | **SQLite**                  | Single file, zero ops. Render's free tier has ephemeral disk, so production data is uploaded fresh per session via `/import` (this is also a feature — the demo always starts clean). Postgres swap is a 30-min Sequel adapter change for true persistence. |
 | **BigDecimal**              | Float is banned for money to avoid binary representation issues. Decimal columns + Sequel coercion give exact arithmetic.                                                                                                                                   |
 | **RSpec**                   | Standard. Each example wraps in a Sequel transaction with rollback for clean isolation.                                                                                                                                                                     |
@@ -41,7 +41,16 @@ fx_rates                 goods_receipts        accrual_sources
                                                 audit_events  (append-only)
 ```
 
-14 tables across 4 migrations.
+17 tables across 3 schema migrations (a 4th adds the LLM cache columns to `accruals`).
+
+### Data import as a first-class flow
+
+The deployed app starts with an empty schema and lands on `/import` until reference data is loaded. Two ways in:
+
+- **Upload an XLSX** in the same shape as the Helix anchor (sheets: `customers`, `sku_price_book`, `vendors`, `gl_accounts`, `usage_events`, `chargebee_invoices`, `purchase_orders`, `po_lines`, `goods_receipts`, `vendor_invoices`).
+- **Click "Load sample data"** — uses the bundled Helix anchor that ships with the repo, so a reviewer with no XLSX in hand can demo in one click.
+
+Each import wipes all tables in dependency order before re-seeding, so the engine never accrues against a stale partial state. Render's free tier has ephemeral disk, which makes this a feature: every cold-boot session starts clean and the panelist can decide which dataset to demo against. Controller-grade framing ("Data import" rather than "anchor data") keeps the affordance unambiguous to a non-engineer.
 
 ## 4. Engine flow
 
@@ -140,10 +149,10 @@ For each flagged accrual, the engine sends the **structured signal** to Gemini a
 - `thinkingConfig.thinkingBudget = 0` disables Gemini 2.5's internal reasoning tokens (we don't need CoT for paraphrasing)
 - Runs **outside** the engine transaction — an LLM error never rolls back the close
 - Result cached on `accruals.review_narration` so the UI never blocks on a live API call
-- Errors audited as `review_narration_failed`; missing key returns nil silently and the UI hides the section
+- Errors audited as `review_narration_failed`; a missing key audits `review_narration_skipped` (with reason) and the UI hides the narration block
 - Swappable to Anthropic / OpenAI by replacing one class — engine is unaware
 
-## 12. Test strategy (53 specs)
+## 12. Test strategy (62 specs)
 
 | Layer             | What it covers                                                                                                                                   |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -153,8 +162,8 @@ For each flagged accrual, the engine sends the **structured signal** to Gemini a
 | Business calendar | Weekend skip, federal-holiday skip, the close→reversal date specifically                                                                         |
 | CSV exporter      | Header + per-line + balanced DR/CR                                                                                                               |
 | Narrator          | Nil paths, transport injection, error capture                                                                                                    |
-| Integration       | Full close against the seeded anchor → exact target match                                                                                        |
-| System (HTTP)     | Index → run engine → drill-through → CSV → idempotent re-run                                                                                     |
+| Integration       | Full close against the seeded anchor → exact target match; calendar-month bound on a non-anchor period_end                                       |
+| System (HTTP)     | Close flow (index → run → drill-through → CSV); engine-state reset endpoint; data-import upload + bundled-sample button                          |
 
 Each spec wraps in a Sequel transaction with rollback for isolation.
 
