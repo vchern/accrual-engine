@@ -7,19 +7,17 @@ At month-end, two distinct accruals need to land on Helix's books:
 - **AR**: Chargebee invoices on a Sun-Sat weekly cycle. The Mar 29 invoice covered Mar 22-28, so at the Mar 31 (Tue) close, three days of usage are earned-but-unbilled.
 - **AP**: Coupa goods receipts post into NetSuite when hardware arrives, but the vendor invoice often follows weeks later. At close, any GR without a matching invoice represents an asset/expense to accrue (GR/IR clearing).
 
-Both reduce to the same shape: *given the data we have, what's the closest-to-actual accrual we can compute, and what's the journal entry?* Two integrations and two audit trails would be wasteful — one engine with pluggable handlers solves both.
+Both reduce to the same shape: _given the data we have, what's the closest-to-actual accrual we can compute, and what's the journal entry?_ Two integrations and two audit trails would be wasteful — one engine with pluggable handlers solves both.
 
 ## 2. Stack & rationale
 
-| Choice | Why |
-| --- | --- |
-| **Sinatra over Rails** | The pluggable-handler story is a Ruby concern, not a framework one. A reviewer can read `app.rb` end-to-end in a few minutes — fewer surprises, no hidden magic. The brief ruled out auth/RBAC/jobs (Rails' headline wins) so the cost was minimal. |
-| **Sequel over ActiveRecord** | Sinatra-idiomatic, fast, BigDecimal-clean. Migration DSL is concise. |
-| **SQLite** | Single file, zero ops. Render's free tier has ephemeral disk, so production data is uploaded fresh per session via `/import` (this is also a feature — the demo always starts clean). Postgres swap is a 30-min Sequel adapter change for true persistence. |
-| **BigDecimal everywhere** | Float is banned for money. Decimal columns + Sequel coercion give exact arithmetic. |
-| **Tailwind via CDN** | Demo grade. Compilation step (e.g. via `tailwindcss-ruby`) would land before any real production rollout. |
-| **RSpec** | Standard. Each example wraps in a Sequel transaction with rollback for clean isolation. |
-| **Google Gemini 2.5 Flash** | Free-tier LLM, current generation, grounded narration. Swappable to Anthropic/OpenAI without engine changes. |
+| Choice                      | Why                                                                                                                                                                                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sinatra over Rails**      | I chose Sinatra because it is lightweight and quick to prototype. For creating small focused applications, Sinatra is a better choice over rails.                                                                                                           |
+| **SQLite**                  | Single file, zero ops. Render's free tier has ephemeral disk, so production data is uploaded fresh per session via `/import` (this is also a feature — the demo always starts clean). Postgres swap is a 30-min Sequel adapter change for true persistence. |
+| **BigDecimal**              | Float is banned for money to avoid binary representation issues. Decimal columns + Sequel coercion give exact arithmetic.                                                                                                                                   |
+| **RSpec**                   | Standard. Each example wraps in a Sequel transaction with rollback for clean isolation.                                                                                                                                                                     |
+| **Google Gemini 2.5 Flash** | Free-tier LLM, current generation, grounded narration. Swappable to Anthropic/OpenAI without engine changes.                                                                                                                                                |
 
 ## 3. Data model
 
@@ -87,7 +85,7 @@ Re-running the engine for the same close: existing rows update in place; if amou
 
 ## 6. Multi-currency
 
-The price book is USD-only (`list_unit_price_usd`). `Customer.currency` is the *display* currency. For non-USD-billed customers (CUS-1002 EUR):
+The price book is USD-only (`list_unit_price_usd`). `Customer.currency` is the _display_ currency. For non-USD-billed customers (CUS-1002 EUR):
 
 - `amount_usd` — canonical, computed from `quantity × USD list price`
 - `amount_billing_ccy = amount_usd / fx_rate` — display only
@@ -127,6 +125,7 @@ For the anchor's seeded outlier (CUS-1001 Mar 30, 25h vs ~10h median): z ≈ 6.1
 For each flagged accrual, the engine sends the **structured signal** to Gemini and persists a 2-3 sentence Controller-grade narrative.
 
 **Grounded by design**:
+
 - The prompt forbids inventing or recomputing amounts
 - The LLM receives only fields the engine already computed (date, qty, median, z-score, customer label)
 - Its job is plain-English paraphrasing, not arithmetic
@@ -136,6 +135,7 @@ For each flagged accrual, the engine sends the **structured signal** to Gemini a
 > "The accrual for CUS-1001 includes 25.0 GPU-H100-HR units on 2026-03-30, which is 14.5 units above the median daily usage of 10.5 units. While this deviation is significant (z=6.1), it could represent valid, increased usage by the customer. The Controller should verify with the sales or account management team if this spike in usage was expected or communicated by Acme Robotics Inc. before approving the accrual."
 
 **Implementation**:
+
 - `Accruals::ReviewNarrator` is a thin service with an injectable `transport` callable — tests pass a lambda; production uses Net::HTTP
 - `thinkingConfig.thinkingBudget = 0` disables Gemini 2.5's internal reasoning tokens (we don't need CoT for paraphrasing)
 - Runs **outside** the engine transaction — an LLM error never rolls back the close
@@ -145,38 +145,35 @@ For each flagged accrual, the engine sends the **structured signal** to Gemini a
 
 ## 12. Test strategy (53 specs)
 
-| Layer | What it covers |
-| --- | --- |
-| Service | Each handler against the brief's target cents (`AR=$362.50`, `AP=$100,000`); EUR fx math; mid-period churn; partial receipt; fully-invoiced skip |
-| Engine | Idempotent re-run, source replacement, reversal pairing, audit events, amount-change detection |
-| Anomaly detector | Outlier flag, baseline-too-small, zero-MAD edge case |
-| Business calendar | Weekend skip, federal-holiday skip, the close→reversal date specifically |
-| CSV exporter | Header + per-line + balanced DR/CR |
-| Narrator | Nil paths, transport injection, error capture |
-| Integration | Full close against the seeded anchor → exact target match |
-| System (HTTP) | Index → run engine → drill-through → CSV → idempotent re-run |
+| Layer             | What it covers                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Service           | Each handler against the brief's target cents (`AR=$362.50`, `AP=$100,000`); EUR fx math; mid-period churn; partial receipt; fully-invoiced skip |
+| Engine            | Idempotent re-run, source replacement, reversal pairing, audit events, amount-change detection                                                   |
+| Anomaly detector  | Outlier flag, baseline-too-small, zero-MAD edge case                                                                                             |
+| Business calendar | Weekend skip, federal-holiday skip, the close→reversal date specifically                                                                         |
+| CSV exporter      | Header + per-line + balanced DR/CR                                                                                                               |
+| Narrator          | Nil paths, transport injection, error capture                                                                                                    |
+| Integration       | Full close against the seeded anchor → exact target match                                                                                        |
+| System (HTTP)     | Index → run engine → drill-through → CSV → idempotent re-run                                                                                     |
 
 Each spec wraps in a Sequel transaction with rollback for isolation.
 
 ## 13. What I'd do differently with more time
 
-| Refinement | Effort |
-| --- | --- |
-| Per-customer unbilled window (denormalize `last_invoiced_through` on Customer) instead of global max | 30 min |
-| Compile Tailwind via `tailwindcss-ruby` standalone CLI | 30 min |
-| Move LLM narration to Solid Queue / Que so a slow Gemini response doesn't block the run | 1-2 hr |
-| Stretch handlers — AP subscription / straight-line and AP milestone (pattern is in place) | 2 hr each |
-| Forecast model with prediction interval on a dashboard page | half day |
-| Real per-currency price book (anchor only had USD); FX path in handlers is ready | 1 hr |
-| Postgres swap (Sequel adapter change + Render-managed Postgres or Neon free tier) | 30 min |
-| Auth + RBAC (out of scope per brief) | 1 day with Devise/Sorcery or roll-your-own |
+| Refinement                                                                                           | Effort                                     |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Per-customer unbilled window (denormalize `last_invoiced_through` on Customer) instead of global max | 30 min                                     |
+| Move LLM narration to Solid Queue / Que so a slow Gemini response doesn't block the run              | 1-2 hr                                     |
+| Stretch handlers — AP subscription / straight-line and AP milestone (pattern is in place)            | 2 hr each                                  |
+| Forecast model with prediction interval on a dashboard page                                          | half day                                   |
+| Real per-currency price book (anchor only had USD); FX path in handlers is ready                     | 1 hr                                       |
+| Postgres swap (Sequel adapter change + Render-managed Postgres or Neon free tier)                    | 30 min                                     |
+| Auth + RBAC (out of scope per brief)                                                                 | 1 day with Devise/Sorcery or roll-your-own |
 
 ## Known limitations
 
 - **SQLite + single-process**: fine for demo; replace with Postgres for prod.
 - **No NetSuite API integration**: brief explicitly says CSV is sufficient.
-- **Tailwind via CDN**: not for prod.
 - **LLM call is synchronous** in `engine.run!`; ~1-3s adder on free Gemini tier. Should be async-queued in production.
 - **Anomaly detection is per-(customer, SKU)** with no cross-customer signal. Adequate for the seeded scenario; richer detection (cross-customer, cross-SKU correlation, time-series decomposition) would land alongside the forecast model.
 - **Audit events are append-only but unsigned**. For true compliance you'd hash-chain them or write to an immutable store.
-- **Anchor XLSX is gitignored** per project preference; reviewer must drop the file into the project root before running `bin/setup`.
