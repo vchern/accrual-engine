@@ -88,8 +88,9 @@ RSpec.describe 'Data import flow', type: :request do
     post '/import/demo'
     expect(last_response.status).to eq(302)
     expect(last_response.headers['Location']).to end_with('/closes')
-    expect(Customer.count).to eq(5)         # 3 anchor + 2 new (Tokyo, London)
+    expect(Customer.count).to eq(6)         # 3 anchor + 3 new (Tokyo, London, Singapore)
     expect(Sku.count).to eq(5)              # 3 anchor + GPU-A100-HR + BANDWIDTH-TB
     expect(GoodsReceipt.count).to eq(2)
+    expect(VendorInvoice.count).to eq(2)    # exercises AP skip + remainder paths
   end
 end

@@ -39,7 +39,8 @@ class Seeder
   FX_RATES = {
     'EUR' => '1.08',
     'JPY' => '0.0067',
-    'GBP' => '1.27'
+    'GBP' => '1.27',
+    'SGD' => '0.74'
   }.freeze
 
   # Expected sheet names + column order. Any divergence in an uploaded XLSX

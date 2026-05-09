@@ -7,20 +7,30 @@
 # Run: bundle exec ruby script/generate_demo_dataset.rb
 #
 # Targets for period_end = 2026-03-31:
-#   AR  $1,042.50  (5 customers, 13 unbilled-window events, 2 flagged)
-#   AP  $150,000.00  (PO-2026-0188 \$100K + PO-2026-0190 \$50K, both GR-not-invoiced)
-#   Total  $151,042.50
+#   AR  $1,042.50   (5 customers accrue; CUS-1006 has no unbilled events → SKIPPED)
+#   AP  $30,000.00  (GR-2026-0042 fully invoiced → SKIPPED; GR-2026-0043 partially
+#                    invoiced → \$50K - \$20K = \$30K remainder)
+#   Total  $31,042.50
+#
+# Skip paths exercised:
+#   1. AR — customer with no events in unbilled window (CUS-1006)
+#   2. AP — goods receipt fully invoiced (GR-2026-0042 + INV-V001)
+#   3. AP — goods receipt partially invoiced, remainder accrued (GR-2026-0043 + INV-V002)
 
 require 'caxlsx'
 
 OUT = File.expand_path('../Helix_Demo_Expanded.xlsx', __dir__)
 
 CUSTOMERS = [
-  ['CUS-1001', 'Acme Robotics Inc.',     'USD', 'US', 'active',  '2024-11-03'],
-  ['CUS-1002', 'Berlin Labs GmbH',       'EUR', 'DE', 'active',  '2025-01-12'],
-  ['CUS-1003', 'Cobra Systems LLC',      'USD', 'US', 'churned', '2025-06-08'],
-  ['CUS-1004', 'Tokyo AI Research',      'JPY', 'JP', 'active',  '2025-09-01'],
-  ['CUS-1005', 'London Quant Capital',   'GBP', 'GB', 'active',  '2025-04-15']
+  ['CUS-1001', 'Acme Robotics Inc.',          'USD', 'US', 'active',  '2024-11-03'],
+  ['CUS-1002', 'Berlin Labs GmbH',            'EUR', 'DE', 'active',  '2025-01-12'],
+  ['CUS-1003', 'Cobra Systems LLC',           'USD', 'US', 'churned', '2025-06-08'],
+  ['CUS-1004', 'Tokyo AI Research',           'JPY', 'JP', 'active',  '2025-09-01'],
+  ['CUS-1005', 'London Quant Capital',        'GBP', 'GB', 'active',  '2025-04-15'],
+  # Skip-path demonstration: customer with events in the prior invoice
+  # period (Mar 28) but NONE in the unbilled window (Mar 29-31). Engine
+  # produces no AR accrual for them.
+  ['CUS-1006', 'Singapore Capital Markets',   'SGD', 'SG', 'active',  '2025-11-20']
 ].freeze
 
 SKUS = [
@@ -75,7 +85,11 @@ USAGE_EVENTS = [
   ['evt_h0007', 'CUS-1005', 'STORAGE-TB-DAY',      100,  '2026-03-28'],
   ['evt_u0017', 'CUS-1005', 'STORAGE-TB-DAY',      100,  '2026-03-29'],
   ['evt_u0018', 'CUS-1005', 'STORAGE-TB-DAY',      100,  '2026-03-30'],
-  ['evt_u0019', 'CUS-1005', 'STORAGE-TB-DAY',      100,  '2026-03-31']
+  ['evt_u0019', 'CUS-1005', 'STORAGE-TB-DAY',      100,  '2026-03-31'],
+  # CUS-1006 has ONE Mar 28 event (prior-period; already invoiced) and
+  # nothing in Mar 29-31 — so the AR handler emits no accrual for them.
+  # Skip path: "customer with no events in the unbilled window".
+  ['evt_h0008', 'CUS-1006', 'INFERENCE-1K-TOKENS', 1500, '2026-03-28']
 ].freeze
 
 CHARGEBEE_INVOICES = [
@@ -83,7 +97,8 @@ CHARGEBEE_INVOICES = [
   ['INV-2026-0292', 'CUS-1002', '2026-03-22', '2026-03-28', '2026-03-29T00:00:00Z',  140.00, 'EUR', 1.08],
   ['INV-2026-0293', 'CUS-1003', '2026-03-22', '2026-03-28', '2026-03-29T00:00:00Z',  700.00, 'USD', 1.0],
   ['INV-2026-0294', 'CUS-1004', '2026-03-22', '2026-03-28', '2026-03-29T00:00:00Z', 1120.00, 'JPY', 0.0067],
-  ['INV-2026-0295', 'CUS-1005', '2026-03-22', '2026-03-28', '2026-03-29T00:00:00Z',  420.00, 'GBP', 1.27]
+  ['INV-2026-0295', 'CUS-1005', '2026-03-22', '2026-03-28', '2026-03-29T00:00:00Z',  420.00, 'GBP', 1.27],
+  ['INV-2026-0296', 'CUS-1006', '2026-03-22', '2026-03-28', '2026-03-29T00:00:00Z',   30.00, 'SGD', 0.74]
 ].freeze
 
 PURCHASE_ORDERS = [
@@ -101,8 +116,13 @@ GOODS_RECEIPTS = [
   ['GR-2026-0043', 'PO-2026-0190', 'L1', 1, '2026-03-27', 50000.00,  'Partial receipt — 1 of 2 racks delivered']
 ].freeze
 
-# vendor_invoices sheet stays empty — same as the anchor (GR-not-invoiced case).
-VENDOR_INVOICES = [].freeze
+# Two seeded vendor invoices to exercise AP skip paths:
+#   INV-V001 fully covers GR-2026-0042 ($100K)        → AP handler SKIPS that GR.
+#   INV-V002 partially covers GR-2026-0043 ($20K of $50K) → AP accrues the $30K remainder.
+VENDOR_INVOICES = [
+  ['INV-V001', 'VEN-DELL-01', 'PO-2026-0188', '2026-03-30', 100000.00, 'posted'],
+  ['INV-V002', 'VEN-DELL-01', 'PO-2026-0190', '2026-03-31',  20000.00, 'posted']
+].freeze
 
 Axlsx::Package.new do |p|
   p.workbook do |wb|
@@ -110,13 +130,18 @@ Axlsx::Package.new do |p|
       s.add_row ['Helix Compute Inc. — Expanded Demo Dataset']
       s.add_row []
       s.add_row ['Same company as the canonical anchor, expanded for richer demos.']
-      s.add_row ['5 customers (USD/EUR/USD/JPY/GBP), 5 SKUs, 1 vendor, 2 POs.']
+      s.add_row ['6 customers (USD/EUR/USD/JPY/GBP/SGD), 5 SKUs, 1 vendor, 2 POs.']
       s.add_row ['Two seeded anomalies: CUS-1001 Mar 30 GPU spike, CUS-1004 Mar 30 bandwidth spike.']
       s.add_row []
+      s.add_row ['Skip paths exercised by this dataset:']
+      s.add_row ['  AR — CUS-1006 has events in prior period only; no Mar 29-31 events → no accrual.']
+      s.add_row ['  AP — GR-2026-0042 fully covered by INV-V001 → handler skips.']
+      s.add_row ['  AP — GR-2026-0043 partially covered by INV-V002 → accrues remainder ($30K of $50K).']
+      s.add_row []
       s.add_row ['Targets for period_end=2026-03-31:']
-      s.add_row ['  AR    $1,042.50  (5 customers, 2 flagged)']
-      s.add_row ['  AP    $150,000.00 (2 GR-not-invoiced)']
-      s.add_row ['  Total $151,042.50']
+      s.add_row ['  AR    $1,042.50  (5 of 6 customers, 2 flagged)']
+      s.add_row ['  AP    $30,000.00 (1 GR partially uninvoiced)']
+      s.add_row ['  Total $31,042.50']
     end
 
     wb.add_worksheet(name: 'customers') do |s|

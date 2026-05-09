@@ -131,9 +131,13 @@
         <div>
           <div class="text-sm font-medium text-slate-900">Helix expanded demo</div>
           <p class="text-sm text-slate-600 mt-1">
-            Same company, richer data: 5 customers across USD/EUR/JPY/GBP, 5 SKUs, 2 POs,
-            2 seeded anomalies (CUS-1001 GPU spike + CUS-1004 bandwidth spike).
-            Targets: AR $1,042.50 · AP $150,000 · total $151,042.50.
+            Same company, richer data: 6 customers across USD/EUR/JPY/GBP/SGD, 5 SKUs, 2 POs.
+            Exercises every skip path:
+            CUS-1001 + CUS-1004 anomalies flag (accrue actual);
+            CUS-1006 has no events in the unbilled window (AR skipped);
+            GR-2026-0042 is fully vendor-invoiced (AP skipped);
+            GR-2026-0043 is partially vendor-invoiced (accrues remainder).
+            Targets: AR $1,042.50 · AP $30,000 · total $31,042.50.
           </p>
         </div>
         <form method="post" action="/import/demo"
