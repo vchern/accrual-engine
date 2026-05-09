@@ -35,6 +35,7 @@ module Accruals
             accruals: Accrual.where(close_run_id: @close_run.id).count,
             journal_entries: JournalEntry.where(close_run_id: @close_run.id).count)
       narrate_flagged_accruals
+      summarize_close
       @close_run.refresh
     rescue StandardError => e
       mark_failed(e)
@@ -224,6 +225,33 @@ module Accruals
           )
           audit(:review_narration_added, accrual_id: accrual.id, model: result.model)
         end
+      end
+    end
+
+    # Best-effort: ask the LLM for a Controller-grade close summary. Run
+    # *outside* the engine transaction (same rationale as narration) so an
+    # LLM error never rolls back the close. Skips re-summarization if a
+    # summary already exists; audits skipped/failed cases for visibility.
+    def summarize_close
+      return if @close_run.summary && !@close_run.summary.to_s.empty?
+
+      if ENV['GEMINI_API_KEY'].to_s.strip.empty?
+        audit(:close_summary_skipped, reason: 'GEMINI_API_KEY not set in environment')
+        return
+      end
+
+      result = Accruals::CloseSummarizer.summarize(@close_run)
+      return if result.nil?
+
+      if result.error
+        audit(:close_summary_failed, error: result.error)
+      else
+        @close_run.update(
+          summary:       result.text,
+          summary_at:    Time.now.utc,
+          summary_model: result.model
+        )
+        audit(:close_summary_added, model: result.model)
       end
     end
 

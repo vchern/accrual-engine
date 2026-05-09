@@ -178,6 +178,24 @@ module Lambda
       end
 
       # Returns { state: :added | :failed | :skipped | :none, message:, model: }
+      # describing whether a close has an LLM-generated executive summary.
+      def summary_status(close_run)
+        if close_run.summary && !close_run.summary.to_s.empty?
+          return { state: :added, message: close_run.summary, model: close_run.summary_model }
+        end
+
+        failed = AuditEvent.where(close_run_id: close_run.id, action: 'close_summary_failed')
+                            .order(Sequel.desc(:created_at)).first
+        return { state: :failed, message: failed.payload_data['error'].to_s } if failed
+
+        skipped = AuditEvent.where(close_run_id: close_run.id, action: 'close_summary_skipped')
+                            .order(Sequel.desc(:created_at)).first
+        return { state: :skipped, message: skipped.payload_data['reason'].to_s } if skipped
+
+        { state: :none }
+      end
+
+      # Returns { state: :added | :failed | :skipped | :none, message:, model: }
       # describing why a flagged accrual does or doesn't have an LLM narration.
       # Reads the audit log written by Engine#narrate_flagged_accruals.
       def narration_status(accrual)

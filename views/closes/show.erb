@@ -35,6 +35,28 @@
 
   <% case @tab %>
   <% when 'overview' %>
+    <% ss = summary_status(@close_run) %>
+    <% case ss[:state] %>
+    <% when :added %>
+      <div class="rounded-lg border border-slate-200 bg-white p-5">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-xs uppercase tracking-wide font-medium text-slate-500">AI close summary</div>
+          <div class="text-xs text-slate-400">&middot; <%= ss[:model] %></div>
+        </div>
+        <p class="text-sm text-slate-700 leading-relaxed"><%= ss[:message] %></p>
+      </div>
+    <% when :failed %>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+        <span class="uppercase tracking-wide font-medium">AI close summary &middot; failed</span>
+        <span class="text-slate-500">&middot; <%= ss[:message] %></span>
+      </div>
+    <% when :skipped %>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+        <span class="uppercase tracking-wide font-medium">AI close summary &middot; skipped</span>
+        <span class="text-slate-500">&middot; <%= ss[:message] %></span>
+      </div>
+    <% end %>
+
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="rounded-lg border border-slate-200 bg-white p-5">
         <div class="text-xs uppercase tracking-wide text-slate-500">AR accruals</div>
