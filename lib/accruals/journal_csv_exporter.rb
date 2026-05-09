@@ -42,9 +42,13 @@ module Accruals
         .where(close_run_id: @close_run.id)
         .order(:entry_date, :id)
         .each do |je|
-          accrual = je.accrual
-          source_refs = accrual.accrual_sources.map { |s| "#{s.source_type}##{s.source_id}" }.join(';')
           je.journal_lines.sort_by(&:id).each do |line|
+            accrual = line.accrual
+            source_refs = if accrual
+                            accrual.accrual_sources.map { |s| "#{s.source_type}##{s.source_id}" }.join(';')
+                          else
+                            ''
+                          end
             yield row_for(je, accrual, line, source_refs)
           end
         end
@@ -61,8 +65,8 @@ module Accruals
         format('%.2f', line.credit_amount_usd),
         line.memo,
         @close_run.id,
-        accrual.id,
-        accrual.handler_name,
+        accrual&.id,
+        accrual&.handler_name,
         source_refs
       ]
     end

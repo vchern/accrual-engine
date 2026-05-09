@@ -90,55 +90,60 @@ module Accruals
         JournalLine.where(journal_entry_id: stale_je_ids).delete
         JournalEntry.where(id: stale_je_ids).delete
       end
-      generate_accrual_entries
-      generate_reversing_entries
+      generate_consolidated_entries
     end
 
-    def generate_accrual_entries
-      Accrual.where(close_run_id: @close_run.id).each do |acc|
-        je = JournalEntry.create(
-          close_run_id: @close_run.id,
-          accrual_id:   acc.id,
-          entry_type:   'accrual',
-          entry_date:   @close_run.period_end
-        )
+    # Consolidated journal entries: one accrual JE for the entire close +
+    # one paired reversal JE. Each accrual contributes 2 lines (DR + CR)
+    # to the accrual JE and 2 mirror lines to the reversal. Per-accrual
+    # source-trace lives on `journal_lines.accrual_id`. Matches how a
+    # controller would post a single month-end JE to NetSuite.
+    def generate_consolidated_entries
+      accruals = Accrual.where(close_run_id: @close_run.id).order(:id).all
+      return if accruals.empty?
+
+      accrual_je = JournalEntry.create(
+        close_run_id: @close_run.id,
+        entry_type:   'accrual',
+        entry_date:   @close_run.period_end
+      )
+
+      accruals.each do |acc|
         memo = "#{acc.handler_name} #{acc.idempotency_key}"
         JournalLine.create(
-          journal_entry_id:  je.id,
+          journal_entry_id:  accrual_je.id,
+          accrual_id:        acc.id,
           gl_account_id:     acc.gl_debit_account_id,
           debit_amount_usd:  acc.amount_usd,
           credit_amount_usd: BigDecimal('0'),
           memo:              memo
         )
         JournalLine.create(
-          journal_entry_id:  je.id,
+          journal_entry_id:  accrual_je.id,
+          accrual_id:        acc.id,
           gl_account_id:     acc.gl_credit_account_id,
           debit_amount_usd:  BigDecimal('0'),
           credit_amount_usd: acc.amount_usd,
           memo:              memo
         )
       end
-    end
 
-    def generate_reversing_entries
-      reversal_date = BusinessCalendar.next_business_day(@close_run.period_end)
-      JournalEntry.where(close_run_id: @close_run.id, entry_type: 'accrual').each do |je|
-        rev = JournalEntry.create(
-          close_run_id: @close_run.id,
-          accrual_id:   je.accrual_id,
-          entry_type:   'reversal',
-          entry_date:   reversal_date,
-          reverses_id:  je.id
+      reversal_je = JournalEntry.create(
+        close_run_id: @close_run.id,
+        entry_type:   'reversal',
+        entry_date:   BusinessCalendar.next_business_day(@close_run.period_end),
+        reverses_id:  accrual_je.id
+      )
+
+      accrual_je.journal_lines.each do |line|
+        JournalLine.create(
+          journal_entry_id:  reversal_je.id,
+          accrual_id:        line.accrual_id,
+          gl_account_id:     line.gl_account_id,
+          debit_amount_usd:  line.credit_amount_usd,
+          credit_amount_usd: line.debit_amount_usd,
+          memo:              "Reversal of JE-#{accrual_je.id}"
         )
-        je.journal_lines.each do |line|
-          JournalLine.create(
-            journal_entry_id:  rev.id,
-            gl_account_id:     line.gl_account_id,
-            debit_amount_usd:  line.credit_amount_usd,
-            credit_amount_usd: line.debit_amount_usd,
-            memo:              "Reversal of JE-#{je.id}"
-          )
-        end
       end
     end
 

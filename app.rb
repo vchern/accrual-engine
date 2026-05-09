@@ -297,7 +297,12 @@ module Lambda
       halt(404, 'Accrual does not belong to this close') unless @accrual.close_run_id == @close_run.id
 
       @sources = @accrual.accrual_sources.map { |s| [s, s.source] }
-      @journal_entries = JournalEntry.where(accrual_id: @accrual.id).order(:entry_date, :id).all
+
+      # Lines this accrual contributed to the close's consolidated JEs,
+      # grouped by their parent JE for display.
+      lines = JournalLine.where(accrual_id: @accrual.id).order(:journal_entry_id, :id).all
+      @lines_by_je = lines.group_by(&:journal_entry_id)
+      @journal_entries = lines.map(&:journal_entry).uniq.sort_by(&:entry_date)
 
       erb :'accruals/show'
     end

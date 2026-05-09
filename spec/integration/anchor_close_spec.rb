@@ -37,12 +37,14 @@ RSpec.describe 'End-to-end close against the Helix anchor' do
     expect(acc.amount_billing_ccy).to eq(BigDecimal('55.5556'))
   end
 
-  it 'generates one accrual JE + one reversal JE per accrual; reversals dated 2026-04-01' do
+  it 'generates one consolidated accrual JE + one reversal JE; reversal dated 2026-04-01' do
     Accruals::Engine.new(close_run).run!
 
     accrual_count = Accrual.where(close_run_id: close_run.id).count
-    expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'accrual').count).to eq(accrual_count)
-    expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'reversal').count).to eq(accrual_count)
+    expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'accrual').count).to eq(1)
+    expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'reversal').count).to eq(1)
+    # Each accrual contributes 2 lines to each of the 2 JEs.
+    expect(JournalLine.count).to eq(accrual_count * 4)
     expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'reversal').map(:entry_date).uniq)
       .to eq([Date.new(2026, 4, 1)])
   end

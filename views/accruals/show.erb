@@ -152,7 +152,8 @@
         </thead>
         <tbody class="divide-y divide-slate-100">
           <% @journal_entries.each do |je| %>
-            <% je.journal_lines.sort_by(&:id).each_with_index do |line, idx| %>
+            <% lines = (@lines_by_je[je.id] || []).sort_by(&:id) %>
+            <% lines.each_with_index do |line, idx| %>
               <tr>
                 <td class="px-4 py-2.5 text-slate-700 num"><%= idx.zero? ? je.id : '' %></td>
                 <td class="px-4 py-2.5"><%= idx.zero? ? status_pill(je.entry_type) : '' %></td>
