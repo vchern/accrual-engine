@@ -136,7 +136,7 @@ module Lambda
     ].freeze
 
     UPLOAD_PATH        = File.join(Dir.tmpdir, 'lambda_uploaded_anchor.xlsx').freeze
-    SAMPLE_ANCHOR_PATH = File.join(ROOT, 'Helix_Anchor_Dataset_CANDIDATE.xlsx').freeze
+    SAMPLE_ANCHOR_PATH = File.join(ROOT, 'Helix_Anchor_Canonical.xlsx').freeze
     SAMPLE_DEMO_PATH   = File.join(ROOT, 'Helix_Demo_Expanded.xlsx').freeze
 
     helpers do
