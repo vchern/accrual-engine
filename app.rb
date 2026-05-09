@@ -137,6 +137,7 @@ module Lambda
 
     UPLOAD_PATH        = File.join(Dir.tmpdir, 'lambda_uploaded_anchor.xlsx').freeze
     SAMPLE_ANCHOR_PATH = File.join(ROOT, 'Helix_Anchor_Dataset_CANDIDATE.xlsx').freeze
+    SAMPLE_DEMO_PATH   = File.join(ROOT, 'Helix_Demo_Expanded.xlsx').freeze
 
     helpers do
       def reference_loaded?
@@ -145,6 +146,10 @@ module Lambda
 
       def sample_anchor_available?
         File.exist?(SAMPLE_ANCHOR_PATH)
+      end
+
+      def sample_demo_available?
+        File.exist?(SAMPLE_DEMO_PATH)
       end
 
       def import_counts
@@ -223,8 +228,19 @@ module Lambda
 
       DB.transaction do
         ALL_TABLES.each { |t| DB[t].delete }
+        Seeder.run!(path: SAMPLE_ANCHOR_PATH, log: ->(_) {})
       end
-      Seeder.run!(path: SAMPLE_ANCHOR_PATH, log: ->(_) {})
+
+      redirect '/closes'
+    end
+
+    post '/import/demo' do
+      halt 404, 'No bundled demo dataset available' unless sample_demo_available?
+
+      DB.transaction do
+        ALL_TABLES.each { |t| DB[t].delete }
+        Seeder.run!(path: SAMPLE_DEMO_PATH, log: ->(_) {})
+      end
 
       redirect '/closes'
     end

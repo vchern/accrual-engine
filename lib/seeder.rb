@@ -14,10 +14,32 @@ class Seeder
   SYNTHETIC_WINDOW_END    = Date.new(2026, 3, 27)
   CUS_1003_CHURN_AT       = Time.utc(2026, 3, 29, 23, 59, 59)
 
+  # Synthetic-history baselines per (customer, SKU) pair. Multiple SKUs per
+  # customer are supported so the anomaly detector has enough baseline for
+  # each independently — e.g. CUS-1004 has both GPU and BANDWIDTH series,
+  # and a spike in either should flag without contaminating the other.
   CUSTOMER_BASELINES = {
-    'CUS-1001' => { sku: 'GPU-H100-HR',         mean: 10,   sigma: 2,   round: 1 },
-    'CUS-1002' => { sku: 'STORAGE-TB-DAY',      mean: 200,  sigma: 20,  round: 0 },
-    'CUS-1003' => { sku: 'INFERENCE-1K-TOKENS', mean: 5000, sigma: 500, round: 0 }
+    'CUS-1001' => [{ sku: 'GPU-H100-HR',         mean: 10,   sigma: 2,   round: 1 }],
+    'CUS-1002' => [{ sku: 'STORAGE-TB-DAY',      mean: 200,  sigma: 20,  round: 0 }],
+    'CUS-1003' => [{ sku: 'INFERENCE-1K-TOKENS', mean: 5000, sigma: 500, round: 0 }],
+    # Demo-dataset customers — only seeded if these customer rows exist.
+    'CUS-1004' => [
+      { sku: 'GPU-A100-HR',  mean: 50,  sigma: 5,  round: 1 },
+      { sku: 'BANDWIDTH-TB', mean: 100, sigma: 10, round: 0 }
+    ],
+    'CUS-1005' => [
+      { sku: 'INFERENCE-1K-TOKENS', mean: 2500, sigma: 250, round: 0 },
+      { sku: 'STORAGE-TB-DAY',      mean: 100,  sigma: 10,  round: 0 }
+    ]
+  }.freeze
+
+  # FX rates seeded daily for each non-USD currency that appears in the
+  # customer set. Anchor README pegs EUR @ 1.08; JPY/GBP figures are
+  # plausible 2026 placeholders.
+  FX_RATES = {
+    'EUR' => '1.08',
+    'JPY' => '0.0067',
+    'GBP' => '1.27'
   }.freeze
 
   # Expected sheet names + column order. Any divergence in an uploaded XLSX
@@ -170,17 +192,20 @@ class Seeder
     end
   end
 
-  # Synthetic FX rates: anchor README states EUR→USD = 1.08. Seed daily
-  # rates across March 2026 so any rate lookup in the period finds a row.
+  # Synthetic FX rates for any non-USD currency a customer might use.
+  # Anchor README pegs EUR @ 1.08; JPY and GBP added for the expanded demo.
+  # Daily rates so a lookup at any period_end finds a row.
   def seed_fx_rates
     (Date.new(2026, 3, 1)..Date.new(2026, 3, 31)).each do |d|
-      next if skip?(FxRate, from_ccy: 'EUR', to_ccy: 'USD', effective_date: d)
-      FxRate.create(
-        from_ccy:       'EUR',
-        to_ccy:         'USD',
-        rate:           BigDecimal('1.08'),
-        effective_date: d
-      )
+      FX_RATES.each do |from_ccy, rate|
+        next if skip?(FxRate, from_ccy: from_ccy, to_ccy: 'USD', effective_date: d)
+        FxRate.create(
+          from_ccy:       from_ccy,
+          to_ccy:         'USD',
+          rate:           BigDecimal(rate),
+          effective_date: d
+        )
+      end
     end
   end
 
@@ -284,41 +309,47 @@ class Seeder
   end
 
   def seed_synthetic_history
-    # Once seeded, never regenerate -- the synthetic events have deterministic
-    # IDs and would conflict on re-run regardless of mode.
-    return if UsageEvent.where(Sequel.like(:event_id, 'evt_synth_%')).any?
-
     rng = Random.new(SYNTHETIC_RNG_SEED)
 
-    CUSTOMER_BASELINES.each do |customer_code, params|
+    CUSTOMER_BASELINES.each do |customer_code, sku_specs|
       customer = Customer.where(customer_id: customer_code).first
-      sku      = Sku.where(sku: params[:sku]).first
-      next unless customer && sku
+      next unless customer
 
-      (SYNTHETIC_WINDOW_START..SYNTHETIC_WINDOW_END).each do |date|
-        next if customer.churned? && customer.churned_at && date > customer.churned_at.to_date
+      sku_specs.each do |params|
+        sku = Sku.where(sku: params[:sku]).first
+        next unless sku
 
-        # Box-Muller for Gaussian noise
-        u1 = rng.rand
-        u2 = rng.rand
-        z  = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math::PI * u2)
-        raw = params[:mean] + (z * params[:sigma])
-        quantity = [0.0, raw].max
+        # Per-(customer, SKU) skip: if this pair already has synthetic
+        # history, leave it alone. Lets a second dataset add NEW pairs in
+        # append mode without duplicating IDs for previously-seeded ones.
+        next if UsageEvent.where(customer_id: customer.id, sku_id: sku.id)
+                          .where(Sequel.like(:event_id, 'evt_synth_%')).any?
 
-        rounded = if params[:round].zero?
-                    quantity.round
-                  else
-                    factor = 10**params[:round]
-                    (quantity * factor).round / factor.to_f
-                  end
+        (SYNTHETIC_WINDOW_START..SYNTHETIC_WINDOW_END).each do |date|
+          next if customer.churned? && customer.churned_at && date > customer.churned_at.to_date
 
-        UsageEvent.create(
-          event_id:    "evt_synth_#{customer_code}_#{date.strftime('%Y%m%d')}_#{params[:sku]}",
-          customer_id: customer.id,
-          sku_id:      sku.id,
-          quantity:    BigDecimal(rounded.to_s),
-          occurred_on: date
-        )
+          # Box-Muller for Gaussian noise
+          u1 = rng.rand
+          u2 = rng.rand
+          z  = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math::PI * u2)
+          raw = params[:mean] + (z * params[:sigma])
+          quantity = [0.0, raw].max
+
+          rounded = if params[:round].zero?
+                      quantity.round
+                    else
+                      factor = 10**params[:round]
+                      (quantity * factor).round / factor.to_f
+                    end
+
+          UsageEvent.create(
+            event_id:    "evt_synth_#{customer_code}_#{date.strftime('%Y%m%d')}_#{params[:sku]}",
+            customer_id: customer.id,
+            sku_id:      sku.id,
+            quantity:    BigDecimal(rounded.to_s),
+            occurred_on: date
+          )
+        end
       end
     end
   end

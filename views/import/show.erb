@@ -96,27 +96,51 @@
     }
   </script>
 
-  <% if sample_anchor_available? %>
+  <% if sample_anchor_available? || sample_demo_available? %>
     <div class="flex items-center gap-3 text-sm">
       <div class="flex-1 border-t border-slate-200"></div>
       <span class="text-slate-400 uppercase tracking-wide text-xs">or</span>
       <div class="flex-1 border-t border-slate-200"></div>
     </div>
+  <% end %>
 
+  <% if sample_anchor_available? %>
     <div class="rounded-lg border border-slate-200 bg-white p-6">
       <div class="flex items-start justify-between gap-6">
         <div>
-          <div class="text-sm font-medium text-slate-900">Use the bundled Helix sample</div>
+          <div class="text-sm font-medium text-slate-900">Helix anchor (canonical)</div>
           <p class="text-sm text-slate-600 mt-1">
-            Don't have an XLSX handy? Load the canonical Helix sample that ships with the
-            app. Produces the brief's target totals: AR $362.50, AP $100,000, total $100,362.50.
+            The brief's reference dataset: 3 customers, 1 vendor, 1 PO, 1 seeded anomaly.
+            Targets: AR $362.50 · AP $100,000 · total $100,362.50.
           </p>
         </div>
         <form method="post" action="/import/sample"
-              onsubmit="return confirm('Load the bundled Helix sample? All existing data will be replaced.');">
+              onsubmit="return confirm('Load the bundled Helix anchor? All existing data will be replaced.');">
           <button type="submit"
                   class="inline-flex items-center rounded-md border border-slate-300 bg-white text-slate-700 text-sm font-medium px-4 py-2 hover:bg-slate-50 shadow-sm whitespace-nowrap">
-            Load sample data
+            Load canonical
+          </button>
+        </form>
+      </div>
+    </div>
+  <% end %>
+
+  <% if sample_demo_available? %>
+    <div class="rounded-lg border border-slate-200 bg-white p-6">
+      <div class="flex items-start justify-between gap-6">
+        <div>
+          <div class="text-sm font-medium text-slate-900">Helix expanded demo</div>
+          <p class="text-sm text-slate-600 mt-1">
+            Same company, richer data: 5 customers across USD/EUR/JPY/GBP, 5 SKUs, 2 POs,
+            2 seeded anomalies (CUS-1001 GPU spike + CUS-1004 bandwidth spike).
+            Targets: AR $1,042.50 · AP $150,000 · total $151,042.50.
+          </p>
+        </div>
+        <form method="post" action="/import/demo"
+              onsubmit="return confirm('Load the expanded demo? All existing data will be replaced.');">
+          <button type="submit"
+                  class="inline-flex items-center rounded-md border border-slate-300 bg-white text-slate-700 text-sm font-medium px-4 py-2 hover:bg-slate-50 shadow-sm whitespace-nowrap">
+            Load expanded demo
           </button>
         </form>
       </div>

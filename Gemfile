@@ -26,6 +26,10 @@ gem 'rake', '~> 13.2'
 gem 'dotenv', '~> 3.1'
 gem 'tailwindcss-ruby', '~> 3.4'   # Standalone Tailwind binary, no Node.
 
+group :development do
+  gem 'caxlsx', '~> 4.1'           # XLSX writer — used by the demo-data generator script.
+end
+
 group :development, :test do
   gem 'rspec', '~> 3.13'
   gem 'rack-test', '~> 2.2'

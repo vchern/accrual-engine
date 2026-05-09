@@ -21,5 +21,6 @@ public/application.css
 .claude/
 .ruby-lsp/
 *.xlsx
-# Whitelist the bundled sample so the deployed demo has a one-click data source.
+# Whitelist the bundled samples so the deployed demo has one-click data sources.
 !Helix_Anchor_Dataset_CANDIDATE.xlsx
+!Helix_Demo_Expanded.xlsx

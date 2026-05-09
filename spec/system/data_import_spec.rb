@@ -73,9 +73,23 @@ RSpec.describe 'Data import flow', type: :request do
     expect(GoodsReceipt.count).to eq(1)
   end
 
-  it 'GET /import shows the sample-load button when the file is present' do
+  it 'GET /import shows both bundled-sample buttons when files are present' do
     get '/import'
-    expect(last_response.body).to include('Load sample data')
+    expect(last_response.body).to include('Load canonical')
     expect(last_response.body).to include('/import/sample')
+    expect(last_response.body).to include('Load expanded demo')
+    expect(last_response.body).to include('/import/demo')
+  end
+
+  it 'POST /import/demo loads the expanded demo dataset' do
+    expect(File.exist?(File.join(ROOT, 'Helix_Demo_Expanded.xlsx'))).to be true
+    expect(Customer.count).to eq(0)
+
+    post '/import/demo'
+    expect(last_response.status).to eq(302)
+    expect(last_response.headers['Location']).to end_with('/closes')
+    expect(Customer.count).to eq(5)         # 3 anchor + 2 new (Tokyo, London)
+    expect(Sku.count).to eq(5)              # 3 anchor + GPU-A100-HR + BANDWIDTH-TB
+    expect(GoodsReceipt.count).to eq(2)
   end
 end
