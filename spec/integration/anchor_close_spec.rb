@@ -40,11 +40,12 @@ RSpec.describe 'End-to-end close against the Helix anchor' do
   it 'generates one consolidated accrual JE + one reversal JE; reversal dated 2026-04-01' do
     Accruals::Engine.new(close_run).run!
 
-    accrual_count = Accrual.where(close_run_id: close_run.id).count
+    # Flagged accruals (e.g. CUS-1001) stay off the JE pending controller review,
+    # so the line count is driven by posted+approved accruals only.
+    in_je_count = Accrual.where(close_run_id: close_run.id, status: %w[posted approved]).count
     expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'accrual').count).to eq(1)
     expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'reversal').count).to eq(1)
-    # Each accrual contributes 2 lines to each of the 2 JEs.
-    expect(JournalLine.count).to eq(accrual_count * 4)
+    expect(JournalLine.count).to eq(in_je_count * 4)
     expect(JournalEntry.where(close_run_id: close_run.id, entry_type: 'reversal').map(:entry_date).uniq)
       .to eq([Date.new(2026, 4, 1)])
   end

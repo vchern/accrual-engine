@@ -24,11 +24,40 @@
     </div>
   </div>
 
-  <% if @accrual.flagged? %>
-    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-2">
+  <% if @accrual.approved? %>
+    <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 space-y-2">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="font-medium">Approved (was flagged)</div>
+          <div class="mt-1 text-blue-800"><%= @accrual.flagged_reason %></div>
+          <div class="mt-1 text-xs text-blue-700">Posted to the consolidated journal entry.</div>
+        </div>
+        <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= @accrual.id %>/review">
+          <input type="hidden" name="decision" value="reset">
+          <button type="submit" class="text-xs font-medium underline text-blue-700 hover:text-blue-900 whitespace-nowrap">Reset to flagged</button>
+        </form>
+      </div>
+    </div>
+  <% elsif @accrual.rejected? %>
+    <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 space-y-2">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="font-medium">Rejected (was flagged)</div>
+          <div class="mt-1 text-red-800"><%= @accrual.flagged_reason %></div>
+          <div class="mt-1 text-xs text-red-700">Excluded from the consolidated journal entry.</div>
+        </div>
+        <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= @accrual.id %>/review">
+          <input type="hidden" name="decision" value="reset">
+          <button type="submit" class="text-xs font-medium underline text-red-700 hover:text-red-900 whitespace-nowrap">Reset to flagged</button>
+        </form>
+      </div>
+    </div>
+  <% elsif @accrual.flagged? %>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-3">
       <div>
         <div class="font-medium">Flagged for review</div>
         <div class="mt-1"><%= @accrual.flagged_reason %></div>
+        <div class="mt-1 text-xs text-amber-700">Currently excluded from the consolidated journal entry — pending your review.</div>
       </div>
       <% ns = narration_status(@accrual) %>
       <% case ns[:state] %>
@@ -55,6 +84,24 @@
           <p class="mt-1 text-amber-900"><%= ns[:message] %></p>
         </div>
       <% end %>
+
+      <div class="border-t border-amber-200 pt-3 flex flex-wrap items-center gap-3">
+        <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= @accrual.id %>/review" class="inline">
+          <input type="hidden" name="decision" value="approved">
+          <button type="submit"
+                  class="inline-flex items-center rounded-md bg-emerald-600 text-white text-sm font-medium px-4 py-2 hover:bg-emerald-700 shadow-sm">
+            Approve &amp; post
+          </button>
+        </form>
+        <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= @accrual.id %>/review" class="inline">
+          <input type="hidden" name="decision" value="rejected">
+          <button type="submit"
+                  class="inline-flex items-center rounded-md bg-red-600 text-white text-sm font-medium px-4 py-2 hover:bg-red-700 shadow-sm">
+            Reject &amp; skip
+          </button>
+        </form>
+        <span class="text-xs text-amber-700 ml-auto">Approving lands the accrual on the JE; rejecting keeps it off.</span>
+      </div>
     </div>
   <% end %>
 

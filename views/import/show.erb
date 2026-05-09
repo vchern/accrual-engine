@@ -2,10 +2,9 @@
   <div>
     <h1 class="text-2xl font-semibold tracking-tight">Data import</h1>
     <p class="text-slate-600 mt-1 text-sm">
-      Import the source dataset (customers, SKUs, GL accounts, vendors, usage
+      Import the source dataset as an xlsx (customers, SKUs, GL accounts, vendors, usage
       events, POs, goods receipts) so the engine has something to accrue against.
-      The engine runs against whatever you load — importing replaces all existing data.
-    </p>
+      The engine runs against whatever you load.
   </div>
 
   <% if @schema_errors && @schema_errors.any? %>

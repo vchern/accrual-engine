@@ -39,11 +39,12 @@ module Lambda
       def status_pill(status)
         classes =
           case status
-          when 'completed', 'posted'    then 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-          when 'flagged', 'running'     then 'bg-amber-50 text-amber-700 ring-amber-200'
-          when 'failed', 'blocked'      then 'bg-red-50 text-red-700 ring-red-200'
-          when 'pending'                then 'bg-slate-100 text-slate-700 ring-slate-200'
-          else                                'bg-slate-100 text-slate-700 ring-slate-200'
+          when 'completed', 'posted'         then 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+          when 'approved'                    then 'bg-blue-50 text-blue-700 ring-blue-200'
+          when 'flagged', 'running'          then 'bg-amber-50 text-amber-700 ring-amber-200'
+          when 'failed', 'blocked', 'rejected' then 'bg-red-50 text-red-700 ring-red-200'
+          when 'pending'                     then 'bg-slate-100 text-slate-700 ring-slate-200'
+          else                                     'bg-slate-100 text-slate-700 ring-slate-200'
           end
         %(<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset #{classes}">#{status}</span>)
       end
@@ -150,6 +151,18 @@ module Lambda
 
       def sample_demo_available?
         File.exist?(SAMPLE_DEMO_PATH)
+      end
+
+      def write_accrual_audit(close_run, accrual, action, prev_state)
+        ev = AuditEvent.new(
+          close_run_id: close_run.id,
+          accrual_id:   accrual.id,
+          action:       action.to_s,
+          actor:        'controller',
+          created_at:   Time.now.utc
+        )
+        ev.payload_data = { previous_status: prev_state, current_status: accrual.status }
+        ev.save
       end
 
       def import_counts
@@ -280,10 +293,12 @@ module Lambda
       @filter = params[:filter] || 'all'
 
       @accruals = Accrual.where(close_run_id: @close_run.id).order(:entity_kind, :idempotency_key).all
-      @ar_count      = @accruals.count { |a| a.entity_kind == 'ar' }
-      @ap_count      = @accruals.count { |a| a.entity_kind == 'ap' }
-      @flagged_count = @accruals.count { |a| a.status == 'flagged' }
-      @total_usd     = @accruals.map(&:amount_usd).reduce(BigDecimal('0'), :+)
+      @ar_count       = @accruals.count { |a| a.entity_kind == 'ar' }
+      @ap_count       = @accruals.count { |a| a.entity_kind == 'ap' }
+      @flagged_count  = @accruals.count { |a| a.status == 'flagged' }
+      @approved_count = @accruals.count { |a| a.status == 'approved' }
+      @rejected_count = @accruals.count { |a| a.status == 'rejected' }
+      @total_usd      = @accruals.map(&:amount_usd).reduce(BigDecimal('0'), :+)
 
       @journal_entries = JournalEntry.where(close_run_id: @close_run.id).order(:entry_date, :id).all
       @audit_events    = AuditEvent.where(close_run_id: @close_run.id).order(Sequel.desc(:created_at), Sequel.desc(:id)).all
@@ -305,6 +320,36 @@ module Lambda
       @journal_entries = lines.map(&:journal_entry).uniq.sort_by(&:entry_date)
 
       erb :'accruals/show'
+    end
+
+    # Controller review action: approve / reject / reset a flagged accrual.
+    # Updates the accrual status, regenerates the close's consolidated JEs
+    # (so an approval lands on the JE immediately; a reject drops it),
+    # and audits the transition with prev->current status.
+    post '/closes/:id/accruals/:aid/review' do
+      close_run = CloseRun[params[:id].to_i] or halt(404, 'Close run not found')
+      accrual   = Accrual[params[:aid].to_i] or halt(404, 'Accrual not found')
+      halt(404, 'Accrual does not belong to this close') unless accrual.close_run_id == close_run.id
+
+      decision   = params[:decision].to_s
+      prev_state = accrual.status
+
+      case decision
+      when 'approved', 'rejected'
+        halt(422, 'must be flagged to approve or reject') unless accrual.status == 'flagged'
+        accrual.update(status: decision)
+        write_accrual_audit(close_run, accrual, "accrual_#{decision}", prev_state)
+      when 'reset'
+        halt(422, 'only reviewed accruals can be reset') unless %w[approved rejected].include?(accrual.status)
+        accrual.update(status: 'flagged')
+        write_accrual_audit(close_run, accrual, 'accrual_reflagged', prev_state)
+      else
+        halt 400, "unknown decision '#{decision}'"
+      end
+
+      Accruals::Engine.new(close_run).regenerate_journal_entries
+
+      redirect(params[:return].to_s.empty? ? "/closes/#{close_run.id}/accruals/#{accrual.id}" : params[:return])
     end
 
     get '/closes/:id/journal_entries.csv' do

@@ -41,6 +41,17 @@ module Accruals
       raise
     end
 
+    # Public so review routes (approve/reject) can refresh the consolidated
+    # JEs after a status change without re-running every handler.
+    def regenerate_journal_entries
+      stale_je_ids = JournalEntry.where(close_run_id: @close_run.id).select_map(:id)
+      unless stale_je_ids.empty?
+        JournalLine.where(journal_entry_id: stale_je_ids).delete
+        JournalEntry.where(id: stale_je_ids).delete
+      end
+      generate_consolidated_entries
+    end
+
     private
 
     def process_handler(handler_class)
@@ -56,6 +67,14 @@ module Accruals
       existing = Accrual.where(idempotency_key: draft.idempotency_key).first
       if existing
         prev_amount = existing.amount_usd
+
+        # Preserve human review decisions across engine re-runs. The amount
+        # may still update from new source data; an `accrual_amount_changed`
+        # audit event surfaces the delta so a Controller can re-review.
+        if %w[approved rejected].include?(existing.status)
+          attrs.delete(:status)
+        end
+
         existing.update(attrs)
         if prev_amount != existing.amount_usd
           audit(:accrual_amount_changed,
@@ -84,22 +103,17 @@ module Accruals
       end
     end
 
-    def regenerate_journal_entries
-      stale_je_ids = JournalEntry.where(close_run_id: @close_run.id).select_map(:id)
-      unless stale_je_ids.empty?
-        JournalLine.where(journal_entry_id: stale_je_ids).delete
-        JournalEntry.where(id: stale_je_ids).delete
-      end
-      generate_consolidated_entries
-    end
-
     # Consolidated journal entries: one accrual JE for the entire close +
     # one paired reversal JE. Each accrual contributes 2 lines (DR + CR)
     # to the accrual JE and 2 mirror lines to the reversal. Per-accrual
     # source-trace lives on `journal_lines.accrual_id`. Matches how a
     # controller would post a single month-end JE to NetSuite.
     def generate_consolidated_entries
-      accruals = Accrual.where(close_run_id: @close_run.id).order(:id).all
+      # Only `posted` and `approved` accruals contribute lines. Flagged
+      # (awaiting review), rejected, and blocked accruals stay off the JE
+      # until/unless their status changes.
+      accruals = Accrual.where(close_run_id: @close_run.id, status: %w[posted approved])
+                        .order(:id).all
       return if accruals.empty?
 
       accrual_je = JournalEntry.create(

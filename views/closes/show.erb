@@ -57,9 +57,12 @@
 
     <% if @flagged_count.positive? %>
       <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-3">
-        <div class="font-medium">Flagged accruals</div>
+        <div class="flex items-center justify-between">
+          <div class="font-medium">Awaiting review (<%= @flagged_count %>)</div>
+          <div class="text-xs text-amber-700">Flagged accruals stay off the journal entry until you decide.</div>
+        </div>
         <% @accruals.select { |a| a.status == 'flagged' }.each do |a| %>
-          <div class="border-l-2 border-amber-300 pl-3">
+          <div class="border-l-2 border-amber-300 pl-3 space-y-2">
             <div>
               <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="font-medium underline">
                 <%= accrual_label(a) %>
@@ -70,22 +73,35 @@
             <% ns = narration_status(a) %>
             <% case ns[:state] %>
             <% when :added %>
-              <div class="mt-1 text-amber-900 italic">
+              <div class="text-amber-900 italic">
                 <span class="text-xs uppercase tracking-wide not-italic font-medium text-amber-700">AI review note</span>
                 <span class="text-xs text-amber-600 not-italic">&middot; <%= ns[:model] %></span>
                 <div class="mt-0.5"><%= ns[:message] %></div>
               </div>
             <% when :failed %>
-              <div class="mt-1 text-xs text-amber-700">
+              <div class="text-xs text-amber-700">
                 <span class="uppercase tracking-wide font-medium">AI review note &middot; failed</span>
                 <span class="text-amber-600">&middot; <%= ns[:message] %></span>
               </div>
             <% when :skipped %>
-              <div class="mt-1 text-xs text-amber-700">
+              <div class="text-xs text-amber-700">
                 <span class="uppercase tracking-wide font-medium">AI review note &middot; skipped</span>
                 <span class="text-amber-600">&middot; <%= ns[:message] %></span>
               </div>
             <% end %>
+            <div class="flex items-center gap-2">
+              <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= a.id %>/review" class="inline">
+                <input type="hidden" name="decision" value="approved">
+                <input type="hidden" name="return" value="/closes/<%= @close_run.id %>">
+                <button type="submit" class="inline-flex items-center rounded-md bg-emerald-600 text-white text-xs font-medium px-3 py-1 hover:bg-emerald-700 shadow-sm">Approve</button>
+              </form>
+              <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= a.id %>/review" class="inline">
+                <input type="hidden" name="decision" value="rejected">
+                <input type="hidden" name="return" value="/closes/<%= @close_run.id %>">
+                <button type="submit" class="inline-flex items-center rounded-md bg-red-600 text-white text-xs font-medium px-3 py-1 hover:bg-red-700 shadow-sm">Reject</button>
+              </form>
+              <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="text-xs text-amber-700 hover:text-amber-900 underline">View detail</a>
+            </div>
           </div>
         <% end %>
       </div>
@@ -94,16 +110,24 @@
   <% when 'accruals' %>
     <% all_count = @accruals.size %>
     <% rows = case @filter
-              when 'ar'      then @accruals.select { |a| a.entity_kind == 'ar' }
-              when 'ap'      then @accruals.select { |a| a.entity_kind == 'ap' }
-              when 'flagged' then @accruals.select { |a| a.status == 'flagged' }
-              else                @accruals
+              when 'ar'       then @accruals.select { |a| a.entity_kind == 'ar' }
+              when 'ap'       then @accruals.select { |a| a.entity_kind == 'ap' }
+              when 'flagged'  then @accruals.select { |a| a.status == 'flagged' }
+              when 'approved' then @accruals.select { |a| a.status == 'approved' }
+              when 'rejected' then @accruals.select { |a| a.status == 'rejected' }
+              else                 @accruals
               end %>
-    <div class="flex items-center gap-2">
-      <%= filter_chip(@close_run, 'All',     'all',     all_count,     current: @filter) %>
-      <%= filter_chip(@close_run, 'AR',      'ar',      @ar_count,     current: @filter) %>
-      <%= filter_chip(@close_run, 'AP',      'ap',      @ap_count,     current: @filter) %>
-      <%= filter_chip(@close_run, 'Flagged', 'flagged', @flagged_count, current: @filter) %>
+    <div class="flex items-center gap-2 flex-wrap">
+      <%= filter_chip(@close_run, 'All',      'all',      all_count,      current: @filter) %>
+      <%= filter_chip(@close_run, 'AR',       'ar',       @ar_count,      current: @filter) %>
+      <%= filter_chip(@close_run, 'AP',       'ap',       @ap_count,      current: @filter) %>
+      <%= filter_chip(@close_run, 'Flagged',  'flagged',  @flagged_count, current: @filter) %>
+      <% if @approved_count.positive? %>
+        <%= filter_chip(@close_run, 'Approved', 'approved', @approved_count, current: @filter) %>
+      <% end %>
+      <% if @rejected_count.positive? %>
+        <%= filter_chip(@close_run, 'Rejected', 'rejected', @rejected_count, current: @filter) %>
+      <% end %>
     </div>
 
     <% if rows.empty? %>
