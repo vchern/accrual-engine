@@ -114,4 +114,61 @@ RSpec.describe Accruals::Engine do
       expect(change_event.payload_data).to include('previous' => '100.0', 'current' => '150.0')
     end
   end
+
+  context 'when a handler emits a blocked draft' do
+    let(:blocked_handler) do
+      reason = 'PO-XYZ references unknown GL account 9999'
+      Class.new(Accruals::Handler) do
+        define_singleton_method(:handler_name) { 'blocked_fake' }
+        define_method(:call) do
+          [Accruals::DraftAccrual.new(
+            idempotency_key:      'blocked_fake|2026-03-31|XYZ',
+            handler_name:         'blocked_fake',
+            entity_kind:          'ap',
+            status:               'blocked',
+            memo:                 'fake blocked draft',
+            amount_usd:           BigDecimal('200.00'),
+            amount_billing_ccy:   BigDecimal('200.00'),
+            billing_currency:     'USD',
+            fx_rate:              BigDecimal('1'),
+            fx_rate_date:         @close_run.period_end,
+            gl_debit_account_id:  nil,
+            gl_credit_account_id: nil,
+            flagged_reason:       reason,
+            sources:              []
+          )]
+        end
+      end
+    end
+
+    before { stub_const('Accruals::Engine::HANDLERS', [blocked_handler]) }
+
+    it 'persists the accrual with status blocked and nil GL FKs' do
+      described_class.new(close_run).run!
+      a = Accrual.first
+      expect(a.status).to eq('blocked')
+      expect(a.gl_debit_account_id).to be_nil
+      expect(a.gl_credit_account_id).to be_nil
+      expect(a.flagged_reason).to include('9999')
+    end
+
+    it 'keeps blocked accruals OFF the consolidated journal entry' do
+      described_class.new(close_run).run!
+      expect(JournalEntry.where(close_run_id: close_run.id).count).to eq(0)
+      expect(JournalLine.count).to eq(0)
+    end
+
+    it 'writes an accrual_blocked audit event with the reason' do
+      described_class.new(close_run).run!
+      ev = AuditEvent.where(action: 'accrual_blocked').first
+      expect(ev).not_to be_nil
+      expect(ev.payload_data['reason']).to include('9999')
+    end
+
+    it 'does not re-audit blocked on a second run with the same status' do
+      described_class.new(close_run).run!
+      described_class.new(close_run).run!
+      expect(AuditEvent.where(action: 'accrual_blocked').count).to eq(1)
+    end
+  end
 end

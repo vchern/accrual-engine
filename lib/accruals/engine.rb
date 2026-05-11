@@ -34,8 +34,7 @@ module Accruals
       audit(:run_completed,
             accruals: Accrual.where(close_run_id: @close_run.id).count,
             journal_entries: JournalEntry.where(close_run_id: @close_run.id).count)
-      narrate_flagged_accruals
-      summarize_close
+      dispatch_llm_tasks
       @close_run.refresh
     rescue StandardError => e
       mark_failed(e)
@@ -55,6 +54,29 @@ module Accruals
 
     private
 
+    # In production the Gemini calls (N flagged-accrual narrations + 1 close
+    # summary, each ~1-3s) run on a background thread so the HTTP response
+    # returns immediately. Tests run synchronously: each spec wraps in a
+    # Sequel transaction with rollback, and a separate thread would have its
+    # own DB connection that bypasses the rollback (and wouldn't see the
+    # in-progress data either).
+    def dispatch_llm_tasks
+      if ENV['APP_ENV'] == 'test'
+        run_llm_tasks
+      else
+        Thread.new do
+          run_llm_tasks
+        rescue StandardError => e
+          warn "[engine] LLM background thread crashed: #{e.class} #{e.message}"
+        end
+      end
+    end
+
+    def run_llm_tasks
+      narrate_flagged_accruals
+      summarize_close
+    end
+
     def process_handler(handler_class)
       handler = handler_class.new(@close_run)
       drafts  = handler.call
@@ -65,7 +87,9 @@ module Accruals
     def upsert_accrual(draft)
       attrs = draft.to_accrual_attrs.merge(close_run_id: @close_run.id)
 
-      existing = Accrual.where(idempotency_key: draft.idempotency_key).first
+      existing    = Accrual.where(idempotency_key: draft.idempotency_key).first
+      prev_status = existing&.status
+
       if existing
         prev_amount = existing.amount_usd
 
@@ -85,12 +109,20 @@ module Accruals
                 current:    existing.amount_usd.to_s('F'))
         end
         replace_sources(existing, draft.sources || [])
-        existing
+        accrual = existing
       else
         accrual = Accrual.create(attrs)
         replace_sources(accrual, draft.sources || [])
-        accrual
       end
+
+      if accrual.status == 'blocked' && prev_status != 'blocked'
+        audit(:accrual_blocked,
+              accrual_id: accrual.id,
+              key:        draft.idempotency_key,
+              reason:     draft.flagged_reason)
+      end
+
+      accrual
     end
 
     def replace_sources(accrual, sources)

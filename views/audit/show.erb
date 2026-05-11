@@ -1,0 +1,59 @@
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Audit Log</h1>
+    <p class="text-slate-600 mt-1 text-sm">
+      All engine and controller actions across every close, ordered most-recent first.
+      Includes <strong>close deletions</strong> &mdash; the audit row survives even after
+      its close is gone, with the period and totals snapshotted in the payload.
+    </p>
+  </div>
+
+  <% if @events.empty? %>
+    <div class="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
+      <p class="text-slate-600">No audit events yet. Run a close from <a href="/closes" class="font-medium underline">Closes</a> to start generating activity.</p>
+    </div>
+  <% else %>
+
+    <div class="text-xs text-slate-500 num">
+      <%= @total_count %> total event<%= @total_count == 1 ? '' : 's' %>
+      <% if @total_count > @row_cap %>
+        <span class="text-slate-400">(showing recent <%= @row_cap %>)</span>
+      <% end %>
+    </div>
+
+    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Timestamp</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Close</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Action</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Actor</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Payload</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @events.each do |ev| %>
+            <% payload = ev.payload_data %>
+            <tr class="hover:bg-slate-50 <%= ev.action == 'close_deleted' ? 'bg-red-50/40' : '' %>">
+              <td class="px-4 py-2.5 text-slate-600 num whitespace-nowrap"><%= datetime(ev.created_at) %></td>
+              <td class="px-4 py-2.5 num whitespace-nowrap">
+                <% if ev.action == 'close_deleted' %>
+                  <span class="text-slate-700"><%= payload['period_end'] %></span>
+                  <span class="text-xs text-red-600 ml-1">(deleted)</span>
+                <% elsif ev.close_run_id && (cr = @close_runs[ev.close_run_id]) %>
+                  <a href="/closes/<%= cr.id %>?tab=audit" class="text-slate-700 hover:text-slate-900 underline"><%= date_str(cr.period_end) %></a>
+                <% else %>
+                  <span class="text-slate-400">&mdash;</span>
+                <% end %>
+              </td>
+              <td class="px-4 py-2.5 font-medium <%= ev.action == 'close_deleted' ? 'text-red-700' : 'text-slate-900' %>"><%= ev.action %></td>
+              <td class="px-4 py-2.5 text-slate-600"><%= ev.actor %></td>
+              <td class="px-4 py-2.5 text-xs text-slate-500 font-mono break-all"><%= payload.to_json %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</div>

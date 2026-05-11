@@ -45,7 +45,7 @@ module Accruals
           je.journal_lines.sort_by(&:id).each do |line|
             accrual = line.accrual
             source_refs = if accrual
-                            accrual.accrual_sources.map { |s| "#{s.source_type}##{s.source_id}" }.join(';')
+                            accrual.accrual_sources.map { |s| "#{s.source_type}##{s.natural_ref}" }.join(';')
                           else
                             ''
                           end

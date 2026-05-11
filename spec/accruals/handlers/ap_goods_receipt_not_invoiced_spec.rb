@@ -49,4 +49,17 @@ RSpec.describe Accruals::Handlers::ApGoodsReceiptNotInvoiced do
     drafts = described_class.new(close_run).call
     expect(drafts.first.amount_usd).to eq(BigDecimal('60000'))
   end
+
+  it 'emits a blocked draft (instead of raising) when the PO references an unknown GL code' do
+    PurchaseOrder.first.update(gl_account_code: '9999-DOES-NOT-EXIST')
+
+    drafts = described_class.new(close_run).call
+    expect(drafts.size).to eq(1)
+
+    blocked = drafts.first
+    expect(blocked.status).to eq('blocked')
+    expect(blocked.gl_debit_account_id).to be_nil
+    expect(blocked.flagged_reason).to include('9999-DOES-NOT-EXIST')
+    expect(blocked.amount_usd).to eq(BigDecimal('100000.00'))   # amount still computed
+  end
 end

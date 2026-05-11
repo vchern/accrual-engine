@@ -9,7 +9,7 @@ RSpec.describe 'Close-run UI flow', type: :request do
     get '/closes'
     expect(last_response).to be_ok
     expect(last_response.body).to include('No closes yet')
-    expect(last_response.body).to include('Run engine')
+    expect(last_response.body).to include('Run Engine')
 
     # 2. Run a close via POST
     post '/closes', period_end: '2026-03-31'

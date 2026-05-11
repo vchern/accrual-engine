@@ -7,7 +7,7 @@ RSpec.describe 'Data import flow', type: :request do
     get '/import'
     expect(last_response).to be_ok
     expect(last_response.body).to include('No reference data loaded')
-    expect(last_response.body).to include('Data import')
+    expect(last_response.body).to include('Data Import')
   end
 
   it '/closes redirects to /import when no reference data is loaded' do
@@ -75,9 +75,9 @@ RSpec.describe 'Data import flow', type: :request do
 
   it 'GET /import shows both bundled-sample buttons when files are present' do
     get '/import'
-    expect(last_response.body).to include('Load canonical')
+    expect(last_response.body).to include('Load Canonical')
     expect(last_response.body).to include('/import/sample')
-    expect(last_response.body).to include('Load expanded demo')
+    expect(last_response.body).to include('Load Expanded Demo')
     expect(last_response.body).to include('/import/demo')
   end
 

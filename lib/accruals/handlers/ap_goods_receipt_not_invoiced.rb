@@ -37,22 +37,33 @@ module Accruals
         uninvoiced = receipt.value_usd - invoiced
         return nil if uninvoiced <= BigDecimal('0')
 
-        debit_account = GlAccount.by_code(po.gl_account_code)
-        raise "PO #{po.po_number} references unknown GL #{po.gl_account_code}" unless debit_account
+        debit_account  = GlAccount.by_code(po.gl_account_code)
+        credit_account = GlAccount.by_code(CR_ACCOUNT_CODE)
+
+        # A single PO with an unrecognized GL code shouldn't crash the
+        # whole month-end close. Surface the bad row to the controller as
+        # `blocked` (off the JE; reason in `flagged_reason`); the rest of
+        # the close completes; re-running after a data fix picks it up.
+        block_reason = if debit_account.nil?
+                         "PO #{po.po_number} references unknown GL account #{po.gl_account_code}"
+                       elsif credit_account.nil?
+                         "Missing GL config for accrued AP credit account #{CR_ACCOUNT_CODE}"
+                       end
 
         Accruals::DraftAccrual.new(
           idempotency_key:      "ap_gr_not_invoiced|#{period_end}|#{receipt.receipt_id}",
           handler_name:         self.class.handler_name,
           entity_kind:          'ap',
-          status:               'posted',
+          status:               block_reason ? 'blocked' : 'posted',
           memo:                 build_memo(receipt, po, po_line),
           amount_usd:           uninvoiced,
           amount_billing_ccy:   uninvoiced,
           billing_currency:     po.currency,
           fx_rate:              BigDecimal('1'),
           fx_rate_date:         period_end,
-          gl_debit_account_id:  debit_account.id,
-          gl_credit_account_id: GlAccount.by_code(CR_ACCOUNT_CODE).id,
+          gl_debit_account_id:  debit_account&.id,
+          gl_credit_account_id: credit_account&.id,
+          flagged_reason:       block_reason,
           sources: [
             { source_type: 'GoodsReceipt', source_id: receipt.id },
             { source_type: 'PoLine',       source_id: po_line.id }

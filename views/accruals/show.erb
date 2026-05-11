@@ -34,7 +34,7 @@
         </div>
         <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= @accrual.id %>/review">
           <input type="hidden" name="decision" value="reset">
-          <button type="submit" class="text-xs font-medium underline text-blue-700 hover:text-blue-900 whitespace-nowrap">Reset to flagged</button>
+          <button type="submit" class="text-xs font-medium underline text-blue-700 hover:text-blue-900 whitespace-nowrap">Reset to Flagged</button>
         </form>
       </div>
     </div>
@@ -48,8 +48,18 @@
         </div>
         <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= @accrual.id %>/review">
           <input type="hidden" name="decision" value="reset">
-          <button type="submit" class="text-xs font-medium underline text-red-700 hover:text-red-900 whitespace-nowrap">Reset to flagged</button>
+          <button type="submit" class="text-xs font-medium underline text-red-700 hover:text-red-900 whitespace-nowrap">Reset to Flagged</button>
         </form>
+      </div>
+    </div>
+  <% elsif @accrual.status == 'blocked' %>
+    <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 space-y-2">
+      <div class="font-medium">Blocked: cannot post</div>
+      <div class="text-red-800"><%= @accrual.flagged_reason %></div>
+      <div class="text-xs text-red-700">
+        Excluded from the consolidated journal entry. Fix the source data
+        (typically a missing or unrecognized GL account) and re-run the
+        engine; the engine will pick up the corrected coding.
       </div>
     </div>
   <% elsif @accrual.flagged? %>
@@ -83,6 +93,13 @@
           </div>
           <p class="mt-1 text-amber-900"><%= ns[:message] %></p>
         </div>
+      <% when :generating %>
+        <div class="border-t border-amber-200 pt-2">
+          <div class="text-xs uppercase tracking-wide font-medium text-amber-700">
+            AI review note &middot; generating&hellip;
+          </div>
+          <p class="mt-1 text-amber-900">The Gemini call is running in the background. Refresh the page in a few seconds to see it.</p>
+        </div>
       <% end %>
 
       <div class="border-t border-amber-200 pt-3 flex flex-wrap items-center gap-3">
@@ -90,14 +107,14 @@
           <input type="hidden" name="decision" value="approved">
           <button type="submit"
                   class="inline-flex items-center rounded-md bg-emerald-600 text-white text-sm font-medium px-4 py-2 hover:bg-emerald-700 shadow-sm">
-            Approve &amp; post
+            Approve &amp; Post
           </button>
         </form>
         <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= @accrual.id %>/review" class="inline">
           <input type="hidden" name="decision" value="rejected">
           <button type="submit"
                   class="inline-flex items-center rounded-md bg-red-600 text-white text-sm font-medium px-4 py-2 hover:bg-red-700 shadow-sm">
-            Reject &amp; skip
+            Reject &amp; Skip
           </button>
         </form>
         <span class="text-xs text-amber-700 ml-auto">Approving lands the accrual on the JE; rejecting keeps it off.</span>
@@ -144,7 +161,7 @@
           <% @sources.each do |link, record| %>
             <tr>
               <td class="px-4 py-2.5 text-slate-700"><%= link.source_type %></td>
-              <td class="px-4 py-2.5 num text-slate-700"><%= link.source_id %></td>
+              <td class="px-4 py-2.5 num text-slate-700"><%= link.natural_ref %></td>
               <td class="px-4 py-2.5 text-slate-700">
                 <% case link.source_type %>
                 <% when 'UsageEvent' %>
@@ -184,7 +201,7 @@
   </div>
 
   <div>
-    <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-2">Journal entries</h2>
+    <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-2">Journal Entries</h2>
     <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <table class="min-w-full divide-y divide-slate-200 text-sm">
         <thead class="bg-slate-50">

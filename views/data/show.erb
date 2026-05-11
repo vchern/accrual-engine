@@ -1,0 +1,289 @@
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Data</h1>
+    <p class="text-slate-600 mt-1 text-sm">
+      Browse the reference data and transactions currently loaded in the
+      database. Each tab shows up to <%= @row_cap %> rows; ordering favors
+      most-recent activity for time-stamped tables.
+    </p>
+  </div>
+
+  <% if @all_empty %>
+    <div class="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
+      <p class="text-slate-600">No data loaded yet. Visit <a href="/import" class="font-medium underline">Data Import</a> to load a sample or upload an XLSX.</p>
+    </div>
+  <% else %>
+
+    <div class="border-b border-slate-200 overflow-x-auto">
+      <nav class="-mb-px flex gap-4 whitespace-nowrap min-w-max">
+        <% Lambda::App::DATA_TABS.each do |key, label| %>
+          <% active = (key == @tab) %>
+          <% cls = active ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300' %>
+          <a href="/data?tab=<%= key %>" class="border-b-2 px-1 pb-3 text-sm font-medium <%= cls %>">
+            <%= label %>
+            <span class="ml-1 text-xs <%= active ? 'text-slate-500' : 'text-slate-400' %>"><%= @tab_counts[key] %></span>
+          </a>
+        <% end %>
+      </nav>
+    </div>
+
+    <% capped_note = @active_total > @row_cap ? %( <span class="text-slate-400">(showing first #{@row_cap})</span>) : '' %>
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold tracking-tight">
+        <%= Lambda::App::DATA_TABS.find { |k, _| k == @tab }.last %>
+      </h2>
+      <span class="text-xs text-slate-500 num">
+        <%= @active_total %> row<%= @active_total == 1 ? '' : 's' %><%= capped_note %>
+      </span>
+    </div>
+
+    <% if @active_rows.empty? %>
+      <p class="text-sm text-slate-500 italic">No rows.</p>
+    <% else %>
+      <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <% case @tab %>
+          <% when 'customers' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">Customer ID</th>
+              <th class="px-3 py-2 text-left">Name</th>
+              <th class="px-3 py-2 text-left">Currency</th>
+              <th class="px-3 py-2 text-left">Country</th>
+              <th class="px-3 py-2 text-left">Status</th>
+              <th class="px-3 py-2 text-left">Billing anchor</th>
+              <th class="px-3 py-2 text-left">Churned at</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |c| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= c.customer_id %></td>
+                  <td class="px-3 py-2"><%= c.name %></td>
+                  <td class="px-3 py-2"><%= c.currency %></td>
+                  <td class="px-3 py-2"><%= c.country %></td>
+                  <td class="px-3 py-2"><%= status_pill(c.status) %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= date_str(c.billing_anchor) %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= datetime(c.churned_at) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'vendors' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">Vendor ID</th>
+              <th class="px-3 py-2 text-left">Name</th>
+              <th class="px-3 py-2 text-left">Category</th>
+              <th class="px-3 py-2 text-left">Currency</th>
+              <th class="px-3 py-2 text-left">Default GL</th>
+              <th class="px-3 py-2 text-left">Default dept</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |v| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= v.vendor_id %></td>
+                  <td class="px-3 py-2"><%= v.name %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= v.category %></td>
+                  <td class="px-3 py-2"><%= v.currency %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= v.default_gl_account %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= v.default_department %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'skus' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">SKU</th>
+              <th class="px-3 py-2 text-left">Unit</th>
+              <th class="px-3 py-2 text-right">List unit price USD</th>
+              <th class="px-3 py-2 text-left">Category</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |s| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= s.sku %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= s.unit %></td>
+                  <td class="px-3 py-2 num text-right"><%= usd(s.list_unit_price_usd) %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= s.category %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'gl_accounts' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">Account code</th>
+              <th class="px-3 py-2 text-left">Name</th>
+              <th class="px-3 py-2 text-left">Type</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |g| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= g.account_code %></td>
+                  <td class="px-3 py-2"><%= g.name %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= g.account_type %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'fx_rates' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">From</th>
+              <th class="px-3 py-2 text-left">To</th>
+              <th class="px-3 py-2 text-right">Rate</th>
+              <th class="px-3 py-2 text-left">Effective date</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |fx| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= fx.from_ccy %></td>
+                  <td class="px-3 py-2 num"><%= fx.to_ccy %></td>
+                  <td class="px-3 py-2 num text-right"><%= num(fx.rate, dp: 4) %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= date_str(fx.effective_date) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'usage_events' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">Event ID</th>
+              <th class="px-3 py-2 text-left">Customer</th>
+              <th class="px-3 py-2 text-left">SKU</th>
+              <th class="px-3 py-2 text-right">Quantity</th>
+              <th class="px-3 py-2 text-left">Occurred on</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |e| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= e.event_id %></td>
+                  <td class="px-3 py-2 num"><%= Customer[e.customer_id]&.customer_id %></td>
+                  <td class="px-3 py-2 num"><%= Sku[e.sku_id]&.sku %></td>
+                  <td class="px-3 py-2 num text-right"><%= num(e.quantity) %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= date_str(e.occurred_on) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'chargebee_invoices' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">Invoice ID</th>
+              <th class="px-3 py-2 text-left">Customer</th>
+              <th class="px-3 py-2 text-left">Period</th>
+              <th class="px-3 py-2 text-left">Issued</th>
+              <th class="px-3 py-2 text-right">Subtotal</th>
+              <th class="px-3 py-2 text-left">Currency</th>
+              <th class="px-3 py-2 text-right">FX→USD</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |i| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= i.invoice_id %></td>
+                  <td class="px-3 py-2 num"><%= Customer[i.customer_id]&.customer_id %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= date_str(i.period_start) %> &ndash; <%= date_str(i.period_end) %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= datetime(i.issued_at) %></td>
+                  <td class="px-3 py-2 num text-right"><%= usd(i.subtotal_usd) %></td>
+                  <td class="px-3 py-2"><%= i.currency %></td>
+                  <td class="px-3 py-2 num text-right"><%= num(i.fx_to_usd, dp: 4) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'purchase_orders' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">PO #</th>
+              <th class="px-3 py-2 text-left">Vendor</th>
+              <th class="px-3 py-2 text-left">Type</th>
+              <th class="px-3 py-2 text-left">Department</th>
+              <th class="px-3 py-2 text-left">GL</th>
+              <th class="px-3 py-2 text-left">Currency</th>
+              <th class="px-3 py-2 text-right">Total USD</th>
+              <th class="px-3 py-2 text-left">Status</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |po| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= po.po_number %></td>
+                  <td class="px-3 py-2 num"><%= po.vendor&.vendor_id %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= po.po_type %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= po.department %></td>
+                  <td class="px-3 py-2 num"><%= po.gl_account_code %></td>
+                  <td class="px-3 py-2"><%= po.currency %></td>
+                  <td class="px-3 py-2 num text-right"><%= usd(po.po_total_usd) %></td>
+                  <td class="px-3 py-2"><%= status_pill(po.po_status) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'po_lines' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">PO #</th>
+              <th class="px-3 py-2 text-left">Line</th>
+              <th class="px-3 py-2 text-left">Description</th>
+              <th class="px-3 py-2 text-right">Qty</th>
+              <th class="px-3 py-2 text-left">UOM</th>
+              <th class="px-3 py-2 text-right">Unit price USD</th>
+              <th class="px-3 py-2 text-right">Line total USD</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |pl| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= pl.purchase_order&.po_number %></td>
+                  <td class="px-3 py-2 num"><%= pl.po_line_ref %></td>
+                  <td class="px-3 py-2 text-slate-700"><%= pl.description %></td>
+                  <td class="px-3 py-2 num text-right"><%= num(pl.qty) %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= pl.uom %></td>
+                  <td class="px-3 py-2 num text-right"><%= usd(pl.unit_price_usd) %></td>
+                  <td class="px-3 py-2 num text-right"><%= usd(pl.line_total_usd) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'goods_receipts' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">Receipt ID</th>
+              <th class="px-3 py-2 text-left">PO #</th>
+              <th class="px-3 py-2 text-left">PO line</th>
+              <th class="px-3 py-2 text-right">Received qty</th>
+              <th class="px-3 py-2 text-left">Received on</th>
+              <th class="px-3 py-2 text-right">Value USD</th>
+              <th class="px-3 py-2 text-left">Notes</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |r| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= r.receipt_id %></td>
+                  <td class="px-3 py-2 num"><%= r.purchase_order&.po_number %></td>
+                  <td class="px-3 py-2 num"><%= r.po_line&.po_line_ref %></td>
+                  <td class="px-3 py-2 num text-right"><%= num(r.received_qty) %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= date_str(r.received_on) %></td>
+                  <td class="px-3 py-2 num text-right"><%= usd(r.value_usd) %></td>
+                  <td class="px-3 py-2 text-slate-600"><%= r.notes %></td>
+                </tr>
+              <% end %>
+            </tbody>
+
+          <% when 'vendor_invoices' %>
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="px-3 py-2 text-left">Invoice #</th>
+              <th class="px-3 py-2 text-left">Vendor</th>
+              <th class="px-3 py-2 text-left">PO</th>
+              <th class="px-3 py-2 text-left">Invoice date</th>
+              <th class="px-3 py-2 text-right">Subtotal USD</th>
+              <th class="px-3 py-2 text-left">Status</th>
+            </tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <% @active_rows.each do |vi| %>
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2 num font-medium"><%= vi.invoice_number %></td>
+                  <td class="px-3 py-2 num"><%= Vendor[vi.vendor_id]&.vendor_id %></td>
+                  <td class="px-3 py-2 num"><%= PurchaseOrder[vi.purchase_order_id]&.po_number %></td>
+                  <td class="px-3 py-2 num text-slate-600"><%= date_str(vi.invoice_date) %></td>
+                  <td class="px-3 py-2 num text-right"><%= usd(vi.subtotal_usd) %></td>
+                  <td class="px-3 py-2"><%= status_pill(vi.status) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          <% end %>
+        </table>
+      </div>
+    <% end %>
+
+  <% end %>
+</div>

@@ -5,7 +5,8 @@
       <p class="text-slate-600 mt-1 text-sm">Single accrual engine for AR (usage-based) and AP (Goods-Receipt-not-Invoiced).</p>
     </div>
 
-    <form method="post" action="/closes" class="flex items-end gap-3">
+    <form method="post" action="/closes" class="flex items-end gap-3"
+          onsubmit="return confirmRerunIfExists(this);">
       <div>
         <label for="period_end" class="block text-xs font-medium text-slate-600 mb-1">Period end</label>
         <input type="date" name="period_end" id="period_end" value="2026-03-31" required
@@ -13,14 +14,14 @@
       </div>
       <button type="submit"
               class="inline-flex items-center rounded-md bg-slate-900 text-white text-sm font-medium px-4 py-2 hover:bg-slate-800">
-        Run engine
+        Run Engine
       </button>
     </form>
   </div>
 
   <% if @closes.empty? %>
     <div class="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
-      <p class="text-slate-600">No closes yet. Pick a period above and click <strong>Run engine</strong>.</p>
+      <p class="text-slate-600">No closes yet. Pick a period above and click <strong>Run Engine</strong>.</p>
     </div>
   <% else %>
     <div class="flex items-center justify-end">
@@ -28,7 +29,7 @@
             onsubmit="return confirm('Reset engine state? All close runs, accruals, journal entries, and audit events will be deleted. Reference data (customers, SKUs, usage events, POs, GL accounts) is preserved.');">
         <button type="submit"
                 class="inline-flex items-center rounded-md bg-red-600 text-white text-sm font-medium px-4 py-2 hover:bg-red-700 shadow-sm">
-          Reset engine state
+          Reset Engine State
         </button>
       </form>
     </div>
@@ -64,8 +65,20 @@
                 <% end %>
               </td>
               <td class="px-4 py-3 text-sm text-right font-medium text-slate-900 num"><%= usd(t[:total]) %></td>
-              <td class="px-4 py-3 text-right">
-                <a href="/closes/<%= c.id %>" class="text-sm font-medium text-slate-700 hover:text-slate-900">View &rarr;</a>
+              <td class="px-4 py-3 text-right whitespace-nowrap">
+                <div class="inline-flex items-center gap-2">
+                  <a href="/closes/<%= c.id %>"
+                     class="inline-flex items-center rounded-md bg-slate-900 text-white text-xs font-medium px-3 py-1.5 hover:bg-slate-800 shadow-sm">
+                    View
+                  </a>
+                  <form method="post" action="/closes/<%= c.id %>/delete" class="inline"
+                        onsubmit="return confirm('Delete the <%= date_str(c.period_end) %> close? Accruals, journal entries, and audit events for this close will be removed. Reference data is preserved.');">
+                    <button type="submit"
+                            class="inline-flex items-center rounded-md bg-red-600 text-white text-xs font-medium px-3 py-1.5 hover:bg-red-700 shadow-sm">
+                      Delete
+                    </button>
+                  </form>
+                </div>
               </td>
             </tr>
           <% end %>
@@ -74,3 +87,32 @@
     </div>
   <% end %>
 </div>
+
+<script>
+  const EXISTING_CLOSES = <%= @closes.map { |c|
+    t = @totals_by_close[c.id]
+    {
+      date:     c.period_end.to_s,
+      status:   c.status,
+      accruals: t[:accruals],
+      flagged:  t[:flagged],
+      total:    format('%.2f', t[:total])
+    }
+  }.to_json %>;
+
+  function confirmRerunIfExists(form) {
+    const date = form.period_end.value;
+    const match = EXISTING_CLOSES.find(c => c.date === date);
+    if (!match) return true;
+    return confirm(
+      'A close already exists for ' + date + '.\n\n' +
+      'Status: ' + match.status + '\n' +
+      'Accruals: ' + match.accruals + ' (' + match.flagged + ' flagged)\n' +
+      'Total USD: $' + match.total + '\n\n' +
+      'Re-running recomputes accruals in place by idempotency key. ' +
+      'Approved/rejected decisions are preserved; amount changes write ' +
+      'accrual_amount_changed audit events.\n\n' +
+      'Continue?'
+    );
+  }
+</script>

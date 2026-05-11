@@ -18,9 +18,16 @@
       <div class="text-xs uppercase tracking-wide text-slate-500">Total accrual</div>
       <div class="text-3xl font-semibold text-slate-900 num mt-1"><%= usd(@total_usd) %></div>
       <a href="/closes/<%= @close_run.id %>/journal_entries.csv"
-         class="inline-flex items-center mt-2 text-sm text-slate-700 hover:text-slate-900 font-medium">
-        Download journal CSV &rarr;
+         class="inline-flex items-center mt-3 rounded-md bg-slate-900 text-white text-xs font-medium px-3 py-1.5 hover:bg-slate-800 shadow-sm">
+        Download Journal CSV
       </a>
+      <form method="post" action="/closes/<%= @close_run.id %>/delete" class="mt-3 flex justify-end"
+            onsubmit="return confirm('Delete the <%= date_str(@close_run.period_end) %> close? Accruals, journal entries, and audit events for this close will be removed. Reference data is preserved.');">
+        <button type="submit"
+                class="inline-flex items-center rounded-md bg-red-600 text-white text-xs font-medium px-3 py-1.5 hover:bg-red-700 shadow-sm">
+          Delete Close
+        </button>
+      </form>
     </div>
   </div>
 
@@ -28,8 +35,8 @@
     <nav class="-mb-px flex gap-6">
       <%= tab_link(@close_run, 'Overview',         'overview',        current: @tab) %>
       <%= tab_link(@close_run, 'Accruals',         'accruals',        count: @accruals.size,        current: @tab) %>
-      <%= tab_link(@close_run, 'Journal entries',  'journal',         count: @journal_entries.size, current: @tab) %>
-      <%= tab_link(@close_run, 'Audit log',        'audit',           count: @audit_events.size,    current: @tab) %>
+      <%= tab_link(@close_run, 'Journal Entries',  'journal',         count: @journal_entries.size, current: @tab) %>
+      <%= tab_link(@close_run, 'Audit Log',        'audit',           count: @audit_events.size,    current: @tab) %>
     </nav>
   </div>
 
@@ -54,6 +61,11 @@
       <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
         <span class="uppercase tracking-wide font-medium">AI close summary &middot; skipped</span>
         <span class="text-slate-500">&middot; <%= ss[:message] %></span>
+      </div>
+    <% when :generating %>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+        <span class="uppercase tracking-wide font-medium">AI close summary &middot; generating&hellip;</span>
+        <span class="text-slate-500">&middot; refresh in a few seconds to see it</span>
       </div>
     <% end %>
 
@@ -110,6 +122,11 @@
                 <span class="uppercase tracking-wide font-medium">AI review note &middot; skipped</span>
                 <span class="text-amber-600">&middot; <%= ns[:message] %></span>
               </div>
+            <% when :generating %>
+              <div class="text-xs text-amber-700">
+                <span class="uppercase tracking-wide font-medium">AI review note &middot; generating&hellip;</span>
+                <span class="text-amber-600">&middot; refresh in a few seconds</span>
+              </div>
             <% end %>
             <div class="flex items-center gap-2">
               <form method="post" action="/closes/<%= @close_run.id %>/accruals/<%= a.id %>/review" class="inline">
@@ -122,8 +139,26 @@
                 <input type="hidden" name="return" value="/closes/<%= @close_run.id %>">
                 <button type="submit" class="inline-flex items-center rounded-md bg-red-600 text-white text-xs font-medium px-3 py-1 hover:bg-red-700 shadow-sm">Reject</button>
               </form>
-              <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="text-xs text-amber-700 hover:text-amber-900 underline">View detail</a>
+              <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="text-xs text-amber-700 hover:text-amber-900 underline">View Detail</a>
             </div>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+
+    <% if @blocked_count.positive? %>
+      <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="font-medium">Blocked: cannot post (<%= @blocked_count %>)</div>
+          <div class="text-xs text-red-700">Engine could not code these. Blocked accruals stay off the JE; fix the source data and re-run.</div>
+        </div>
+        <% @accruals.select { |a| a.status == 'blocked' }.each do |a| %>
+          <div class="border-l-2 border-red-300 pl-3">
+            <a href="/closes/<%= @close_run.id %>/accruals/<%= a.id %>" class="font-medium underline">
+              <%= accrual_label(a) %>
+            </a>
+            <span class="num"><%= usd(a.amount_usd) %></span>
+            <span class="text-red-800"> &mdash; <%= a.flagged_reason %></span>
           </div>
         <% end %>
       </div>
@@ -137,6 +172,7 @@
               when 'flagged'  then @accruals.select { |a| a.status == 'flagged' }
               when 'approved' then @accruals.select { |a| a.status == 'approved' }
               when 'rejected' then @accruals.select { |a| a.status == 'rejected' }
+              when 'blocked'  then @accruals.select { |a| a.status == 'blocked' }
               else                 @accruals
               end %>
     <div class="flex items-center gap-2 flex-wrap">
@@ -149,6 +185,9 @@
       <% end %>
       <% if @rejected_count.positive? %>
         <%= filter_chip(@close_run, 'Rejected', 'rejected', @rejected_count, current: @filter) %>
+      <% end %>
+      <% if @blocked_count.positive? %>
+        <%= filter_chip(@close_run, 'Blocked',  'blocked',  @blocked_count,  current: @filter) %>
       <% end %>
     </div>
 

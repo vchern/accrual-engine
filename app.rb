@@ -78,6 +78,7 @@ module Lambda
         %(<a href="/closes/#{close_run.id}?tab=accruals&filter=#{value}" class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium #{cls}">#{label} <span class="ml-1.5 opacity-60">#{count}</span></a>)
       end
 
+
       def accrual_label(accrual)
         case accrual.handler_name
         when 'ar_usage'
@@ -177,8 +178,11 @@ module Lambda
         }
       end
 
-      # Returns { state: :added | :failed | :skipped | :none, message:, model: }
+      # Returns { state: :added | :failed | :skipped | :generating, message:, model: }
       # describing whether a close has an LLM-generated executive summary.
+      # `:generating` means engine.run! has completed but the background LLM
+      # thread either hasn't finished writing yet or crashed silently — in
+      # both cases the user can refresh in a few seconds to recheck.
       def summary_status(close_run)
         if close_run.summary && !close_run.summary.to_s.empty?
           return { state: :added, message: close_run.summary, model: close_run.summary_model }
@@ -192,10 +196,10 @@ module Lambda
                             .order(Sequel.desc(:created_at)).first
         return { state: :skipped, message: skipped.payload_data['reason'].to_s } if skipped
 
-        { state: :none }
+        { state: :generating }
       end
 
-      # Returns { state: :added | :failed | :skipped | :none, message:, model: }
+      # Returns { state: :added | :failed | :skipped | :generating, message:, model: }
       # describing why a flagged accrual does or doesn't have an LLM narration.
       # Reads the audit log written by Engine#narrate_flagged_accruals.
       def narration_status(accrual)
@@ -213,13 +217,67 @@ module Lambda
                             .order(Sequel.desc(:created_at)).first
         return { state: :skipped, message: skipped.payload_data['reason'].to_s } if skipped
 
-        { state: :none, message: nil }
+        { state: :generating, message: nil }
       end
     end
 
     get '/import' do
       @counts = import_counts
       erb :'import/show'
+    end
+
+    DATA_TABS = [
+      ['customers',          'Customers'],
+      ['vendors',            'Vendors'],
+      ['skus',               'SKUs'],
+      ['gl_accounts',        'GL Accounts'],
+      ['fx_rates',           'FX Rates'],
+      ['usage_events',       'Usage Events'],
+      ['chargebee_invoices', 'Chargebee Invoices'],
+      ['purchase_orders',    'Purchase Orders'],
+      ['po_lines',           'PO Lines'],
+      ['goods_receipts',     'Goods Receipts'],
+      ['vendor_invoices',    'Vendor Invoices']
+    ].freeze
+
+    DATA_TAB_QUERIES = {
+      'customers'          => -> { { rows: Customer.order(:customer_id), total: Customer.count } },
+      'vendors'            => -> { { rows: Vendor.order(:vendor_id), total: Vendor.count } },
+      'skus'               => -> { { rows: Sku.order(:sku), total: Sku.count } },
+      'gl_accounts'        => -> { { rows: GlAccount.order(:account_code), total: GlAccount.count } },
+      'fx_rates'           => -> { { rows: FxRate.order(:from_ccy, :effective_date), total: FxRate.count } },
+      'usage_events'       => -> { { rows: UsageEvent.order(Sequel.desc(:occurred_on), :event_id), total: UsageEvent.count } },
+      'chargebee_invoices' => -> { { rows: ChargebeeInvoice.order(Sequel.desc(:issued_at)), total: ChargebeeInvoice.count } },
+      'purchase_orders'    => -> { { rows: PurchaseOrder.order(:po_number), total: PurchaseOrder.count } },
+      'po_lines'           => -> { { rows: PoLine.order(:purchase_order_id, :po_line_ref), total: PoLine.count } },
+      'goods_receipts'     => -> { { rows: GoodsReceipt.order(Sequel.desc(:received_on), :receipt_id), total: GoodsReceipt.count } },
+      'vendor_invoices'    => -> { { rows: VendorInvoice.order(Sequel.desc(:invoice_date), :invoice_number), total: VendorInvoice.count } }
+    }.freeze
+
+    get '/audit' do
+      @row_cap     = 500
+      @total_count = AuditEvent.count
+      @events      = AuditEvent.order(Sequel.desc(:created_at), Sequel.desc(:id)).limit(@row_cap).all
+      @close_runs  = CloseRun.all.each_with_object({}) { |c, h| h[c.id] = c }
+      erb :'audit/show'
+    end
+
+    get '/data' do
+      @row_cap = 200
+      requested = params[:tab].to_s
+      valid_tabs = DATA_TABS.map(&:first)
+      @tab = valid_tabs.include?(requested) ? requested : 'customers'
+
+      @tab_counts = valid_tabs.each_with_object({}) do |t, h|
+        h[t] = DATA_TAB_QUERIES[t].call[:total]
+      end
+
+      active = DATA_TAB_QUERIES[@tab].call
+      @active_rows = active[:rows].limit(@row_cap).all
+      @active_total = active[:total]
+      @all_empty = @tab_counts.values.all?(&:zero?)
+
+      erb :'data/show'
     end
 
     post '/import' do
@@ -285,6 +343,51 @@ module Lambda
       redirect '/closes'
     end
 
+    post '/closes/:id/delete' do
+      close_run = CloseRun[params[:id].to_i] or halt(404, 'Close run not found')
+
+      DB.transaction do
+        accrual_ids   = Accrual.where(close_run_id: close_run.id).select_map(:id)
+        je_ids        = JournalEntry.where(close_run_id: close_run.id).select_map(:id)
+        accrual_count = accrual_ids.size
+        flagged_count = Accrual.where(close_run_id: close_run.id, status: 'flagged').count
+        total_amount  = Accrual.where(close_run_id: close_run.id).sum(:amount_usd) || BigDecimal('0')
+
+        # Write the deletion audit BEFORE the cascade and with a nil
+        # close_run_id so the audit row survives its own subject's
+        # deletion. Payload snapshots the relevant facts so a reviewer
+        # can still see what was deleted on /audit.
+        deletion = AuditEvent.new(
+          close_run_id: nil,
+          action:       'close_deleted',
+          actor:        'controller',
+          created_at:   Time.now.utc
+        )
+        deletion.payload_data = {
+          deleted_close_run_id:    close_run.id,
+          period_end:              close_run.period_end.to_s,
+          status:                  close_run.status,
+          accrual_count:           accrual_count,
+          flagged_count:           flagged_count,
+          journal_entry_count:     je_ids.size,
+          total_amount_usd:        total_amount.to_s
+        }
+        deletion.save
+
+        # Order matters: delete the FK referrers (journal lines/entries,
+        # accrual sources, audit events) before the referents (accruals,
+        # close run). Audit events FK to accrual_id, so they go first.
+        JournalLine.where(journal_entry_id: je_ids).delete unless je_ids.empty?
+        JournalEntry.where(id: je_ids).delete unless je_ids.empty?
+        AccrualSource.where(accrual_id: accrual_ids).delete unless accrual_ids.empty?
+        AuditEvent.where(close_run_id: close_run.id).delete
+        Accrual.where(id: accrual_ids).delete unless accrual_ids.empty?
+        close_run.delete
+      end
+
+      redirect '/closes'
+    end
+
     post '/closes' do
       period_end_str = params[:period_end].to_s.strip
       halt 400, 'period_end is required' if period_end_str.empty?
@@ -316,6 +419,7 @@ module Lambda
       @flagged_count  = @accruals.count { |a| a.status == 'flagged' }
       @approved_count = @accruals.count { |a| a.status == 'approved' }
       @rejected_count = @accruals.count { |a| a.status == 'rejected' }
+      @blocked_count  = @accruals.count { |a| a.status == 'blocked' }
       @total_usd      = @accruals.map(&:amount_usd).reduce(BigDecimal('0'), :+)
 
       @journal_entries = JournalEntry.where(close_run_id: @close_run.id).order(:entry_date, :id).all
