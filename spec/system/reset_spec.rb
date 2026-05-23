@@ -3,7 +3,7 @@ require 'spec_helper'
 RSpec.describe 'POST /closes/reset', type: :request do
   before { Seeder.run!(log: ->(_) {}) }
 
-  it 'clears engine tables but preserves reference and transaction data' do
+  it 'wipes ALL tables (engine state + imported reference + transaction data)' do
     post '/closes', period_end: '2026-03-31'
     follow_redirect!
 
@@ -11,13 +11,8 @@ RSpec.describe 'POST /closes/reset', type: :request do
     expect(Accrual.count).to be > 0
     expect(JournalEntry.count).to be > 0
     expect(JournalLine.count).to be > 0
-
-    customer_count   = Customer.count
-    sku_count        = Sku.count
-    usage_count      = UsageEvent.count
-    po_count         = PurchaseOrder.count
-    gr_count         = GoodsReceipt.count
-    gl_count         = GlAccount.count
+    expect(Customer.count).to be > 0
+    expect(UsageEvent.count).to be > 0
 
     post '/closes/reset'
     expect(last_response.status).to eq(302)
@@ -31,12 +26,17 @@ RSpec.describe 'POST /closes/reset', type: :request do
     expect(JournalLine.count).to    eq(0)
     expect(AuditEvent.count).to     eq(0)
 
-    # Reference / transaction data preserved
-    expect(Customer.count).to       eq(customer_count)
-    expect(Sku.count).to            eq(sku_count)
-    expect(UsageEvent.count).to     eq(usage_count)
-    expect(PurchaseOrder.count).to  eq(po_count)
-    expect(GoodsReceipt.count).to   eq(gr_count)
-    expect(GlAccount.count).to      eq(gl_count)
+    # Imported data gone too
+    expect(Customer.count).to         eq(0)
+    expect(Sku.count).to              eq(0)
+    expect(Vendor.count).to           eq(0)
+    expect(GlAccount.count).to        eq(0)
+    expect(FxRate.count).to           eq(0)
+    expect(UsageEvent.count).to       eq(0)
+    expect(ChargebeeInvoice.count).to eq(0)
+    expect(PurchaseOrder.count).to    eq(0)
+    expect(PoLine.count).to           eq(0)
+    expect(GoodsReceipt.count).to     eq(0)
+    expect(VendorInvoice.count).to    eq(0)
   end
 end

@@ -335,11 +335,7 @@ module Lambda
     end
 
     post '/closes/reset' do
-      DB.transaction do
-        %i[journal_lines journal_entries accrual_sources audit_events accruals close_runs].each do |t|
-          DB[t].delete
-        end
-      end
+      DB.transaction { ALL_TABLES.each { |t| DB[t].delete } }
       redirect '/closes'
     end
 

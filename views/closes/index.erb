@@ -26,10 +26,10 @@
   <% else %>
     <div class="flex items-center justify-end">
       <form method="post" action="/closes/reset"
-            onsubmit="return confirm('Reset engine state? All close runs, accruals, journal entries, and audit events will be deleted. Reference data (customers, SKUs, usage events, POs, GL accounts) is preserved.');">
+            onsubmit="return confirm('Wipe ALL data? Every close, accrual, journal entry, audit event, and the entire imported XLSX (customers, vendors, SKUs, GL accounts, FX rates, usage events, Chargebee invoices, POs, goods receipts, vendor invoices) will be deleted. You will land on /import on a clean DB.');">
         <button type="submit"
                 class="inline-flex items-center rounded-md bg-red-600 text-white text-sm font-medium px-4 py-2 hover:bg-red-700 shadow-sm">
-          Reset Engine State
+          Wipe All Data
         </button>
       </form>
     </div>

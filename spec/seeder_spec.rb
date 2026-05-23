@@ -25,6 +25,9 @@ RSpec.describe Seeder do
       expect(synth.count).to eq(90)     # 30 days × 3 customers (synth window ends pre-churn)
 
       expect(FxRate.where(from_ccy: 'EUR', to_ccy: 'USD').count).to eq(31)
+      # Canonical has no JPY/GBP/SGD customers, so no rates seeded for those.
+      expect(FxRate.where(from_ccy: %w[JPY GBP SGD]).count).to eq(0)
+      expect(FxRate.count).to eq(31)
 
       cobra = Customer.where(customer_id: 'CUS-1003').first
       expect(cobra.churned?).to be true

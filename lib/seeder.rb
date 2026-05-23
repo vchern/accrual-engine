@@ -193,12 +193,18 @@ class Seeder
     end
   end
 
-  # Synthetic FX rates for any non-USD currency a customer might use.
-  # Anchor README pegs EUR @ 1.08; JPY and GBP added for the expanded demo.
-  # Daily rates so a lookup at any period_end finds a row.
+  # Synthetic FX rates for the non-USD currencies present in the loaded
+  # customer set. Daily rates so a lookup at any period_end finds a row.
+  # Scoped to actually-needed currencies so canonical (USD/EUR only)
+  # doesn't seed JPY/GBP/SGD rates the engine will never consult.
   def seed_fx_rates
+    needed = Customer.distinct.select_map(:currency).reject { |c| c == 'USD' }.uniq
+    return if needed.empty?
+
     (Date.new(2026, 3, 1)..Date.new(2026, 3, 31)).each do |d|
-      FX_RATES.each do |from_ccy, rate|
+      needed.each do |from_ccy|
+        rate = FX_RATES[from_ccy]
+        next unless rate
         next if skip?(FxRate, from_ccy: from_ccy, to_ccy: 'USD', effective_date: d)
         FxRate.create(
           from_ccy:       from_ccy,

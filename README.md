@@ -53,7 +53,7 @@ bundle exec rspec         # 113 specs, ~22 sec
 - **`/data`**: tabbed browser of every loaded table (customers, vendors, SKUs, GL accounts, FX rates, usage events, Chargebee invoices, POs, PO lines, goods receipts, vendor invoices) with row counts in the nav badges. Up to 200 rows per tab.
 - **`/audit`**: cross-close audit log. Includes `close_deleted` events whose `close_run_id` is detached before the cascade so the row survives its own subject's deletion; the period date and totals are snapshotted in the payload.
 - **Delete Close**: per-close cascade delete (journal lines → JEs → accrual sources → audit events → accruals → close run, in one transaction). A `close_deleted` audit row is written first with `close_run_id=nil` so the deletion remains traceable on `/audit`.
-- **Reset Engine State**: nuclear option. Wipes all closes and engine state, leaves reference data intact.
+- **Wipe All Data**: nuclear option. Wipes every table including the imported XLSX, then lands on `/import` on a clean DB.
 
 ## Stack
 

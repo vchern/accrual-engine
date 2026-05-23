@@ -134,7 +134,7 @@ Three operations a controller can take on an existing close: **re-run**, **delet
 
 - **Re-run** routes through the same `POST /closes` flow. The route reuses the existing `CloseRun` row by `period_end`, the engine upserts accruals by idempotency key, and human decisions (approved/rejected) survive the recompute. Browser-side `confirm()` warns the controller; the server treats it as idempotent regardless.
 - **Per-close delete** (`POST /closes/:id/delete`) cascades through journal lines, journal entries, accrual sources, audit events, accruals, and the close run itself, all in one transaction. FK order is deliberate: audit events go before accruals because `audit_events.accrual_id` references them. Other closes are untouched.
-- **Reset Engine State** (`POST /closes/reset`) wipes every close and its derivatives in one transaction. Reference data (customers, SKUs, GL accounts) is preserved. Useful as a demo affordance; would not exist in production.
+- **Wipe All Data** (`POST /closes/reset`) wipes every table in one transaction: engine state plus imported reference and transaction data. After confirm the user lands back on `/import` on a clean DB. Useful as a demo affordance; would not exist in production.
 
 For audit defensibility after a delete, **a `close_deleted` audit event is written before the cascade**, with `close_run_id` deliberately set to `nil` so the row isn't itself removed by `AuditEvent.where(close_run_id: close_run.id).delete`. The payload snapshots `deleted_close_run_id`, `period_end`, `status`, `accrual_count`, `flagged_count`, `journal_entry_count`, and `total_amount_usd`. The row survives its own subject.
 
